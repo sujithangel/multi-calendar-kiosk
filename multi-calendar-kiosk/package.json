@@ -1,0 +1,45 @@
+{
+  "name": "multi-calendar-kiosk",
+  "version": "1.0.0",
+  "description": "Fullscreen multi-calendar (ICS) kiosk for Windows that auto-starts on boot and cycles calendar views.",
+  "main": "main.js",
+  "author": "SP Jain",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win",
+    "dist:portable": "electron-builder --win portable"
+  },
+  "build": {
+    "appId": "org.spjain.multicalendarkiosk",
+    "productName": "MultiCalendarKiosk",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "vendor/**/*"
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "renderer/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Multi Calendar Kiosk"
+    },
+    "portable": {
+      "artifactName": "MultiCalendarKiosk-portable.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  }
+}
