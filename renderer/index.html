@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multi Room Calendar</title>
+  <!-- ical.js v1.5.0 build/ is a browser global (defines window.ICAL). Do NOT
+       use v2 dist/ical.min.js — that is an ES module and won't define ICAL via
+       a plain <script> tag, which makes every calendar fail to parse. -->
+  <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Floating quick controls (always visible) -->
+  <div id="floatCtrl">
+    <button id="fcFull" title="Toggle fullscreen">⛶</button>
+    <button id="fcTop" title="Hide/show top bar">▤</button>
+    <button id="fcBottom" title="Hide/show bottom summary">▥</button>
+    <button id="fcSettings" title="Settings (F10)">⚙</button>
+  </div>
+
+  <div id="app">
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div class="nav-item active" data-nav="calendar"><span class="nav-ico">📅</span><span class="nav-lbl">Calendar</span></div>
+      <div class="nav-item" data-nav="rooms"><span class="nav-ico">🏢</span><span class="nav-lbl">Rooms</span></div>
+      <div class="nav-item" data-nav="settings"><span class="nav-ico">⚙️</span><span class="nav-lbl">Settings</span></div>
+      <div class="nav-item" data-nav="export"><span class="nav-ico">⤓</span><span class="nav-lbl">Export</span></div>
+      <div class="nav-item" data-nav="alerts"><span class="nav-ico">🔔</span><span id="alertBadge" class="badge hidden">0</span><span class="nav-lbl">Alerts</span></div>
+      <div class="nav-item" data-nav="help"><span class="nav-ico">?</span><span class="nav-lbl">Help</span></div>
+      <div class="nav-spacer"></div>
+      <div class="nav-item" id="collapseBtn"><span class="nav-ico" id="collapseIco">«</span><span class="nav-lbl">Collapse</span></div>
+    </aside>
+
+    <div id="content">
+      <!-- Top area (header + toolbar) -->
+      <div id="topArea">
+      <!-- Header -->
+      <header id="header">
+        <div class="brand">
+          <div class="logo">SPJ</div>
+          <div class="brand-txt">
+            <div class="brand-name">SP JAIN</div>
+            <div class="brand-sub">LONDON SCHOOL<br>OF MANAGEMENT</div>
+          </div>
+        </div>
+        <div class="head-title">
+          <div class="h-main">Multi Room Calendar</div>
+          <div class="h-sub">Today's Schedule Overview</div>
+        </div>
+
+        <div class="card today-card">
+          <div class="card-lbl">📅 Today</div>
+          <div id="todayDate" class="card-val date-val">—</div>
+        </div>
+
+        <div class="card refresh-card">
+          <div class="card-lbl">Auto Refresh <span class="grn-dot"></span></div>
+          <select id="refreshSel" class="mini-sel"></select>
+        </div>
+
+        <div class="card status-card">
+          <div class="card-lbl"><span id="sysDot" class="grn-dot big"></span> System Status</div>
+          <div id="sysStatus" class="card-val status-val">All Systems Online</div>
+        </div>
+      </header>
+
+      <!-- Toolbar -->
+      <div id="toolbar">
+        <div class="dropdown">
+          <button id="roomsToggleBtn" class="tool-card">
+            <div class="tc-title">Hide / Unhide Rooms</div>
+            <div id="roomsShownLbl" class="tc-sub">14 of 14 rooms shown</div>
+          </button>
+          <div id="roomsMenu" class="menu hidden"></div>
+        </div>
+
+        <div class="viewseg">
+          <button data-size="compact" class="seg"><span>▤</span>Compact</button>
+          <button data-size="normal" class="seg active"><span>☰</span>Normal</button>
+          <button data-size="large" class="seg"><span>▦</span>Large</button>
+        </div>
+
+        <div class="legend">
+          <span><span class="ld on"></span>Online</span>
+          <span><span class="ld off"></span>Offline</span>
+          <span><span class="ld busy"></span>Busy</span>
+          <span><span class="ld free"></span>Free</span>
+        </div>
+
+        <div class="search">
+          <input id="searchInput" type="text" placeholder="Search Room..." />
+          <span class="s-ico">🔍</span>
+        </div>
+      </div>
+      </div><!-- /topArea -->
+
+      <!-- Timeline header -->
+      <div id="timeAxis">
+        <div class="axis-label">TIME</div>
+        <div id="axisHours" class="axis-hours"></div>
+      </div>
+
+      <!-- Rows -->
+      <main id="rows" class="size-normal"></main>
+
+      <!-- Footer -->
+      <footer id="footer">
+        <div class="stat"><span class="st-ico total">▦</span><div><div class="st-lbl">Total Rooms</div><div id="stTotal" class="st-val">14</div></div></div>
+        <div class="stat"><span class="st-ico on">●</span><div><div class="st-lbl">Online</div><div id="stOnline" class="st-val">0</div></div></div>
+        <div class="stat"><span class="st-ico off">●</span><div><div class="st-lbl">Offline</div><div id="stOffline" class="st-val">0</div></div></div>
+        <div class="stat"><span class="st-ico busy">●</span><div><div class="st-lbl">Busy Now</div><div id="stBusy" class="st-val">0</div></div></div>
+        <div class="stat"><span class="st-ico free">●</span><div><div class="st-lbl">Free Now</div><div id="stFree" class="st-val">0</div></div></div>
+        <div class="refresh-count">
+          <div class="st-lbl">Next Refresh In</div>
+          <div id="countdown" class="st-val big">--:--</div>
+        </div>
+        <button id="refreshNowBtn" class="refresh-btn" title="Refresh now">⟳</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Settings overlay -->
+  <div id="overlay" class="overlay hidden">
+    <div class="panel">
+      <div class="panel-head"><h2>Settings</h2><button id="closeSettings" class="ghost">✕</button></div>
+      <section>
+        <h3>Rooms &amp; ICS links</h3>
+        <p class="hint">Paste each room's ICS or webcal:// URL. Uncheck "Show" to hide a room.</p>
+        <div id="roomList" class="room-list"></div>
+        <button id="addRoom" class="ghost small">+ Add room</button>
+      </section>
+      <section class="grid2">
+        <label>Day starts<input type="time" id="setDayStart" /></label>
+        <label>Day ends<input type="time" id="setDayEnd" /></label>
+        <label class="check"><input type="checkbox" id="setFullscreen" /> Start fullscreen (kiosk)</label>
+        <label class="check"><input type="checkbox" id="setAutoStart" /> Auto-start on Windows boot</label>
+      </section>
+      <div class="panel-foot">
+        <button id="saveSettings" class="primary">Save &amp; reload</button>
+        <button id="fsToggle" class="ghost">Toggle fullscreen (Esc)</button>
+        <button id="quitApp" class="ghost danger">Quit (Ctrl+Shift+Q)</button>
+      </div>
+      <p class="hint">F10 opens settings · Esc exits fullscreen · Ctrl+Shift+Q quits.</p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
