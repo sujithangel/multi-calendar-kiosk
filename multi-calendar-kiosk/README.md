@@ -74,7 +74,7 @@ The UI loads one small library (`ical.js`) from a CDN. If the kiosk network
 blocks CDNs, vendor it locally:
 
 1. On any machine with internet, download
-   `https://cdn.jsdelivr.net/npm/ical.js@2.1.0/dist/ical.min.js`
+   `https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js`
    into a new `vendor\` folder in this project.
 2. In `renderer\index.html`, change the script line to
    `<script src="../vendor/ical.min.js"></script>`.

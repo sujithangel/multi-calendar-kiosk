@@ -124,7 +124,8 @@ function render(){
     if (!d.configured){
       track = '<div class="empty">⚠ No Calendar Available</div>';
     } else if (!d.online){
-      track = '<div class="empty">⚠ No Calendar Available</div>';
+      const err = d.error ? ' — ' + escapeHtml(d.error) : '';
+      track = `<div class="empty">⚠ Offline${err}</div>`;
     } else if (d.events.length === 0){
       track = '<div class="empty">No Sessions Today</div>';
     } else {
@@ -343,8 +344,30 @@ async function init(){
   // search
   $('searchInput').oninput = () => { searchTerm = $('searchInput').value.trim().toLowerCase(); render(); };
 
-  // sidebar
-  $('collapseBtn').onclick = () => $('app').classList.toggle('collapsed');
+  // sidebar collapse (arrow flips « / »)
+  function applySidebar(){
+    const c = !!CONFIG.settings.sidebarCollapsed;
+    $('app').classList.toggle('collapsed', c);
+    $('collapseIco').textContent = c ? '»' : '«';
+  }
+  $('collapseBtn').onclick = () => {
+    CONFIG.settings.sidebarCollapsed = !CONFIG.settings.sidebarCollapsed;
+    applySidebar(); window.kiosk.saveConfig(CONFIG);
+  };
+  applySidebar();
+
+  // floating quick controls: fullscreen, hide top, hide bottom, settings
+  function applyChrome(){
+    $('content').classList.toggle('hide-top', !!CONFIG.settings.hideTop);
+    $('content').classList.toggle('hide-bottom', !!CONFIG.settings.hideBottom);
+    $('fcTop').classList.toggle('on', !!CONFIG.settings.hideTop);
+    $('fcBottom').classList.toggle('on', !!CONFIG.settings.hideBottom);
+  }
+  $('fcFull').onclick = () => window.kiosk.toggleFullscreen();
+  $('fcTop').onclick = () => { CONFIG.settings.hideTop = !CONFIG.settings.hideTop; applyChrome(); window.kiosk.saveConfig(CONFIG); };
+  $('fcBottom').onclick = () => { CONFIG.settings.hideBottom = !CONFIG.settings.hideBottom; applyChrome(); window.kiosk.saveConfig(CONFIG); };
+  $('fcSettings').onclick = () => openSettings();
+  applyChrome();
   document.querySelectorAll('[data-nav]').forEach(el => {
     el.onclick = () => {
       const nav = el.dataset.nav;

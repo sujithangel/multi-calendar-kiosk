@@ -4,10 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Multi Room Calendar</title>
-  <script src="https://cdn.jsdelivr.net/npm/ical.js@2.1.0/dist/ical.min.js"></script>
+  <!-- ical.js v1.5.0 build/ is a browser global (defines window.ICAL). Do NOT
+       use v2 dist/ical.min.js — that is an ES module and won't define ICAL via
+       a plain <script> tag, which makes every calendar fail to parse. -->
+  <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- Floating quick controls (always visible) -->
+  <div id="floatCtrl">
+    <button id="fcFull" title="Toggle fullscreen">⛶</button>
+    <button id="fcTop" title="Hide/show top bar">▤</button>
+    <button id="fcBottom" title="Hide/show bottom summary">▥</button>
+    <button id="fcSettings" title="Settings (F10)">⚙</button>
+  </div>
+
   <div id="app">
     <!-- Sidebar -->
     <aside id="sidebar">
@@ -18,10 +29,12 @@
       <div class="nav-item" data-nav="alerts"><span class="nav-ico">🔔</span><span id="alertBadge" class="badge hidden">0</span><span class="nav-lbl">Alerts</span></div>
       <div class="nav-item" data-nav="help"><span class="nav-ico">?</span><span class="nav-lbl">Help</span></div>
       <div class="nav-spacer"></div>
-      <div class="nav-item" id="collapseBtn"><span class="nav-ico">‹</span><span class="nav-lbl">Collapse</span></div>
+      <div class="nav-item" id="collapseBtn"><span class="nav-ico" id="collapseIco">«</span><span class="nav-lbl">Collapse</span></div>
     </aside>
 
     <div id="content">
+      <!-- Top area (header + toolbar) -->
+      <div id="topArea">
       <!-- Header -->
       <header id="header">
         <div class="brand">
@@ -80,6 +93,7 @@
           <span class="s-ico">🔍</span>
         </div>
       </div>
+      </div><!-- /topArea -->
 
       <!-- Timeline header -->
       <div id="timeAxis">

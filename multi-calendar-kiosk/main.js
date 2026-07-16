@@ -4,11 +4,9 @@
 // - Reads/writes a JSON config (calendars, rotation, settings)
 // - Can register itself to auto-start on Windows boot
 
-const { app, BrowserWindow, ipcMain, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const https = require('https');
-const http = require('http');
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
 
@@ -41,6 +39,9 @@ const DEFAULT_CONFIG = {
     dayEnd: '18:00',             // timeline end hour
     hiddenRooms: [],             // names of rooms hidden from the board
     viewSize: 'normal',          // 'compact' | 'normal' | 'large'
+    hideTop: false,              // hide header + toolbar
+    hideBottom: false,           // hide footer summary
+    sidebarCollapsed: false,     // collapse left nav
     startFullscreen: true,
     autoStartOnBoot: false
   }
@@ -74,36 +75,40 @@ function saveConfig(cfg) {
   }
 }
 
-// Fetch a URL as text, following a few redirects. Works for http/https and
-// webcal:// (rewritten to https). Bypasses browser CORS entirely.
-function fetchText(url, redirects = 0) {
+// Fetch a URL as text using Electron's Chromium network stack. This respects
+// the system PROXY, DNS and certificate store (same as a browser), which is why
+// feeds that work in a browser also work here. Handles webcal://, redirects and
+// gzip automatically. Bypasses browser CORS entirely (runs in main process).
+function fetchText(url) {
   return new Promise((resolve, reject) => {
-    if (redirects > 5) return reject(new Error('Too many redirects'));
-    let target = url.trim();
+    let target = (url || '').trim();
     if (target.startsWith('webcal://')) target = 'https://' + target.slice('webcal://'.length);
-    let lib;
+    if (!/^https?:\/\//i.test(target)) return reject(new Error('Invalid URL: ' + url));
+
+    let request;
     try {
-      lib = new URL(target).protocol === 'http:' ? http : https;
+      request = net.request({ url: target, redirect: 'follow', useSessionCookies: true });
     } catch (e) {
-      return reject(new Error('Invalid URL: ' + url));
+      return reject(new Error('Bad request: ' + e.message));
     }
-    const req = lib.get(target, { headers: { 'User-Agent': 'MultiCalendarKiosk/1.0' } }, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        res.resume();
-        const next = new URL(res.headers.location, target).toString();
-        return resolve(fetchText(next, redirects + 1));
-      }
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        res.resume();
-        return reject(new Error('HTTP ' + res.statusCode + ' for ' + target));
-      }
+    request.setHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MultiCalendarKiosk/1.0');
+    request.setHeader('Accept', 'text/calendar, text/plain, */*');
+
+    const timer = setTimeout(() => { try { request.abort(); } catch (e) {} reject(new Error('Timed out (20s)')); }, 20000);
+
+    request.on('response', (response) => {
+      const code = response.statusCode;
       let data = '';
-      res.setEncoding('utf8');
-      res.on('data', (c) => (data += c));
-      res.on('end', () => resolve(data));
+      response.on('data', (c) => (data += c.toString('utf8')));
+      response.on('end', () => {
+        clearTimeout(timer);
+        if (code >= 200 && code < 300) resolve(data);
+        else reject(new Error('HTTP ' + code));
+      });
+      response.on('error', (e) => { clearTimeout(timer); reject(e); });
     });
-    req.on('error', reject);
-    req.setTimeout(20000, () => req.destroy(new Error('Request timed out: ' + target)));
+    request.on('error', (e) => { clearTimeout(timer); reject(new Error(e.message || 'Network error')); });
+    request.end();
   });
 }
 

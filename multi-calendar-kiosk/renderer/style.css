@@ -6,6 +6,18 @@ html, body { margin: 0; padding: 0; height: 100%; overflow: hidden;
 
 #app { display: flex; height: 100vh; }
 
+/* Floating quick-control bar (top-right, always on top) */
+#floatCtrl { position: fixed; top: 8px; right: 10px; z-index: 80; display: flex; gap: 6px;
+  background: rgba(255,255,255,.9); border: 1px solid #e2e8f0; border-radius: 12px; padding: 4px; }
+#floatCtrl button { width: 34px; height: 34px; padding: 0; border: none; background: transparent;
+  border-radius: 9px; font-size: 16px; color: #64748b; cursor: pointer; }
+#floatCtrl button:hover { background: #f1f5f9; color: #e11d2a; }
+#floatCtrl button.on { background: #fee2e2; color: #e11d2a; }
+
+/* Hide top / bottom areas */
+#content.hide-top #topArea { display: none; }
+#content.hide-bottom #footer { display: none; }
+
 /* ---------- Sidebar ---------- */
 #sidebar { width: 92px; background: #ffffff; border-right: 1px solid #eef2f7;
   display: flex; flex-direction: column; align-items: stretch; padding: 10px 0; flex: none; }
