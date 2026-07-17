@@ -1,38 +1,69 @@
-/* Multi Room Calendar - renderer logic
- * Loads rooms + settings, fetches each ICS feed via the main process (no CORS),
- * parses today's events, and renders the timeline board, footer stats and
- * refresh countdown shown in the SP Jain kiosk UI.
- */
+/* Classroom Daily View - renderer logic */
 
 let CONFIG = null;
-let refreshTimer = null;
-let countdownTimer = null;
-let nextRefreshAt = 0;
-let lastData = {};            // roomName -> { events, online, configured, error }
-let searchTerm = '';
+let refreshTimer = null, countdownTimer = null, nextRefreshAt = 0;
+let lastData = {};
+let refreshing = false;
 
 const $ = (id) => document.getElementById(id);
-const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const REFRESH_OPTS = [
-  [5,'5 min'],[15,'15 min'],[30,'30 min'],[60,'1 hour'],[240,'4 hours'],
-  [360,'6 hours'],[480,'8 hours'],[720,'12 hours'],[1440,'24 hours']
+const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DAYS_LONG = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MON_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MON_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+const REFRESH_OPTS = [[5,'5 min'],[15,'15 min'],[30,'30 min'],[60,'1 hour'],[240,'4 hours'],[360,'6 hours'],[480,'8 hours'],[720,'12 hours'],[1440,'24 hours']];
+const DATE_FORMATS = [
+  ['ddd-d-mon-yyyy', 'Wed, 16 Jul 2026'],
+  ['weekday-d-month-yyyy', 'Wednesday, 16 July 2026'],
+  ['d-mon-yyyy', '16 Jul 2026'],
+  ['dd/mm/yyyy', '16/07/2026'],
+  ['mm/dd/yyyy', '07/16/2026'],
+  ['yyyy-mm-dd', '2026-07-16']
 ];
+const PALETTES = {
+  default:   ['#2563eb','#0891b2','#0d9488','#16a34a','#65a30d','#d97706','#ea580c','#dc2626','#db2777','#9333ea','#4f46e5','#0284c7','#7c3aed','#b45309'],
+  ocean:     ['#0ea5e9','#0891b2','#0d9488','#0284c7','#2563eb','#3b82f6','#06b6d4','#14b8a6','#0369a1','#1d4ed8','#0e7490','#155e75','#1e40af','#0f766e'],
+  sunset:    ['#f97316','#ea580c','#dc2626','#e11d48','#db2777','#c026d3','#f59e0b','#d97706','#b45309','#be123c','#9d174d','#a21caf','#b91c1c','#c2410c'],
+  forest:    ['#16a34a','#15803d','#65a30d','#4d7c0f','#0d9488','#0f766e','#65a30d','#166534','#3f6212','#14532d','#047857','#065f46','#166534','#14532d'],
+  grayscale: ['#334155','#475569','#64748b','#1e293b','#334155','#475569','#64748b','#0f172a','#334155','#475569','#64748b','#1e293b','#334155','#475569'],
+  vibrant:   ['#7c3aed','#db2777','#e11d2a','#f59e0b','#16a34a','#0891b2','#2563eb','#9333ea','#c026d3','#ea580c','#ca8a04','#059669','#0284c7','#4f46e5']
+};
+const DEFAULT_FONTS = { heading:22, caption:13, timeline:16, roomName:20, sessionTitle:14, sessionDetail:11 };
 
 function pad(n){ return n < 10 ? '0' + n : '' + n; }
-function hhmm(dt){ return pad(dt.getHours()) + ':' + pad(dt.getMinutes()); }
 function parseHour(s, f){ const m = /^(\d{1,2}):(\d{2})$/.exec(s || ''); return m ? (+m[1] + (+m[2])/60) : f; }
 function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function escapeAttr(s){ return escapeHtml(s).replace(/'/g,'&#39;'); }
 
-/* ---- room icons ---- */
-function iconFor(name){
-  const n = name.toLowerCase();
-  if (n.startsWith('elo')) // camera / video
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="13" height="12" rx="2"/><path d="M22 8l-5 4 5 4V8z"/></svg>';
-  if (n.startsWith('board')) // people
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.3"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5"/><path d="M15.5 19c0-2 1.5-3.5 4-3.5"/></svg>';
-  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
+/* ---- formatting ---- */
+function formatTime(dt){
+  let h = dt.getHours(), m = dt.getMinutes();
+  if ((CONFIG.settings.timeFormat || '24') === '12'){ const ap = h>=12?'PM':'AM'; return (h%12||12) + ':' + pad(m) + ' ' + ap; }
+  return pad(h) + ':' + pad(m);
+}
+function fmtHourFloat(h){ const d = new Date(); d.setHours(Math.floor(h), Math.round((h-Math.floor(h))*60), 0, 0); return formatTime(d); }
+function axisHourLabel(h){
+  if ((CONFIG.settings.timeFormat || '24') === '12'){ const ap = h>=12?'p':'a'; return (h%12||12) + ap; }
+  return String(h);
+}
+function formatDate(dt){
+  const key = CONFIG.settings.dateFormat || 'ddd-d-mon-yyyy';
+  const d = dt.getDate(), mo = dt.getMonth(), y = dt.getFullYear(), dow = dt.getDay();
+  switch(key){
+    case 'weekday-d-month-yyyy': return DAYS_LONG[dow] + ', ' + d + ' ' + MON_LONG[mo] + ' ' + y;
+    case 'd-mon-yyyy': return d + ' ' + MON_SHORT[mo] + ' ' + y;
+    case 'dd/mm/yyyy': return pad(d) + '/' + pad(mo+1) + '/' + y;
+    case 'mm/dd/yyyy': return pad(mo+1) + '/' + pad(d) + '/' + y;
+    case 'yyyy-mm-dd': return y + '-' + pad(mo+1) + '-' + pad(d);
+    default: return DAYS_SHORT[dow] + ', ' + d + ' ' + MON_SHORT[mo] + ' ' + y;
+  }
+}
+
+/* ---- room icon (door / room) ---- */
+function iconFor(){
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    + '<path d="M7 3h8a1 1 0 0 1 1 1v15H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M5 19h14"/>'
+    + '<circle cx="13" cy="12" r="1" fill="#fff" stroke="none"/></svg>';
 }
 
 /* ---- ICS parsing: today's events ---- */
@@ -76,54 +107,49 @@ function push(out, s, e, title, sub, dayStart, dayEnd){
   out.push({ start: s < dayStart ? new Date(dayStart) : s, end: e > dayEnd ? new Date(dayEnd) : e, title, sub });
 }
 
-/* ---- Fetch ---- */
+/* ---- fetch ---- */
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
 async function fetchWithRetry(url, retries){
-  let last = { ok: false, error: 'unknown' };
-  for (let a = 0; a <= retries; a++){
-    try { last = await window.kiosk.fetchIcs(url); } catch(e){ last = { ok:false, error: e.message }; }
+  let last = { ok:false, error:'unknown' };
+  for (let a=0; a<=retries; a++){
+    try { last = await window.kiosk.fetchIcs(url); } catch(e){ last = { ok:false, error:e.message }; }
     if (last.ok) return last;
-    if (a < retries) await sleep(2000); // brief backoff before retry
+    if (a < retries) await sleep(2000);
   }
   return last;
 }
-
-let refreshing = false;
 async function refreshAll(){
-  if (refreshing) return;           // avoid overlapping refresh storms
+  if (refreshing) return;
   refreshing = true;
   try {
     let i = 0;
     await Promise.all(CONFIG.calendars.map(async (r) => {
       if (!r.url || !r.url.trim()){ lastData[r.name] = { events:[], online:false, configured:false }; return; }
-      await sleep((i++) * 300);      // stagger requests so 14 feeds don't fire at once
+      await sleep((i++) * 300);
       const prev = lastData[r.name] || {};
       const res = await fetchWithRetry(r.url, 1);
-      if (!res.ok){
-        // Keep last-known events so a transient error doesn't blank the board
-        lastData[r.name] = { events: prev.events || [], online:false, configured:true, error: res.error, stale: true };
-        return;
-      }
-      try {
-        lastData[r.name] = { events: expandTodayEvents(res.text), online:true, configured:true };
-      } catch(e){
-        lastData[r.name] = { events: prev.events || [], online:false, configured:true, error:'Parse error', stale: true };
-      }
-      render(); // paint each feed as it lands
+      if (!res.ok){ lastData[r.name] = { events: prev.events || [], online:false, configured:true, error:res.error, stale:true }; return; }
+      try { lastData[r.name] = { events: expandTodayEvents(res.text), online:true, configured:true }; }
+      catch(e){ lastData[r.name] = { events: prev.events || [], online:false, configured:true, error:'Parse error', stale:true }; }
+      render();
     }));
-  } finally {
-    refreshing = false;
-  }
+  } finally { refreshing = false; }
   render();
   resetCountdown();
 }
 
-/* ---- Render ---- */
+/* ---- render ---- */
 function visibleRooms(){
   const hidden = new Set(CONFIG.settings.hiddenRooms || []);
-  return CONFIG.calendars.filter(r => r.enabled !== false && !hidden.has(r.name)
-    && (!searchTerm || r.name.toLowerCase().includes(searchTerm)));
+  return CONFIG.calendars.filter(r => r.enabled !== false && !hidden.has(r.name));
+}
+function clamp(v){ return Math.max(0, Math.min(100, v)); }
+function gaps(events, H0, H1){
+  const res = []; let cursor = H0;
+  const sorted = events.map(e => ({ s:e.start.getHours()+e.start.getMinutes()/60, e:e.end.getHours()+e.end.getMinutes()/60 })).sort((a,b)=>a.s-b.s);
+  for (const e of sorted){ if (e.s > cursor + 0.08) res.push({ s:cursor, e:Math.min(e.s,H1) }); cursor = Math.max(cursor, e.e); }
+  if (cursor < H1 - 0.08) res.push({ s:cursor, e:H1 });
+  return res;
 }
 
 function render(){
@@ -131,12 +157,9 @@ function render(){
   const H1 = parseHour(CONFIG.settings.dayEnd, 18);
   const span = Math.max(1, H1 - H0);
   const now = new Date();
-  const nowH = now.getHours() + now.getMinutes()/60;
   const rooms = visibleRooms();
 
-  let html = '';
   let cOnline=0, cOffline=0, cBusy=0, cFree=0, cConfigured=0;
-
   for (const r of CONFIG.calendars){
     const d = lastData[r.name] || { events:[], online:false, configured:!!(r.url&&r.url.trim()) };
     const hasData = d.online || (d.events && d.events.length);
@@ -146,161 +169,134 @@ function render(){
     if (hasData){ if (busyNow) cBusy++; else cFree++; }
   }
 
+  let html = '';
   for (const r of rooms){
     const d = lastData[r.name] || { events:[], online:false, configured:!!(r.url&&r.url.trim()) };
     const hasEvents = d.events && d.events.length;
-    const statusCls = d.online ? 'on' : 'off';
-    const statusTxt = d.online ? 'Online' : (hasEvents ? 'Cached' : 'Offline');
+    const dotCls = !d.configured ? 'na' : (d.online ? 'on' : 'off');
 
     let track = '';
-    if (!d.configured){
-      track = '<div class="empty">⚠ No Calendar Available</div>';
-    } else if (!d.online && !hasEvents){
-      const err = d.error ? ' — ' + escapeHtml(d.error) : '';
-      track = `<div class="empty">⚠ Offline${err}</div>`;
+    if (!d.configured || (!d.online && !hasEvents)){
+      const err = (d.configured && d.error) ? ' — ' + escapeHtml(d.error) : '';
+      const label = d.configured ? ('Offline' + err) : 'No Calendar Available';
+      track = `<div class="empty" style="color:${r.color}">${label}</div>`;
     } else if (!hasEvents){
-      track = '<div class="empty">No Sessions Today</div>';
+      track = `<div class="empty" style="color:${r.color}">No Sessions Today</div>`;
     } else {
-      // booked blocks
+      for (const g of gaps(d.events, H0, H1)){
+        const l = clamp((g.s-H0)/span*100), w = clamp((g.e-H0)/span*100) - l;
+        if (w < 2.5) continue;
+        track += `<div class="block free" style="left:${l}%;width:${w}%;color:${r.color}">
+          <div class="bt">${fmtHourFloat(g.s)} - ${fmtHourFloat(g.e)}</div><div class="bn">Free</div></div>`;
+      }
       for (const ev of d.events){
         const sH = ev.start.getHours()+ev.start.getMinutes()/60;
         const eH = ev.end.getHours()+ev.end.getMinutes()/60;
         const l = clamp((sH-H0)/span*100), w = clamp((eH-H0)/span*100) - l;
         if (w <= 0) continue;
-        const live = (now >= ev.start && now < ev.end) ? '<span class="live">LIVE</span>' : '';
+        const live = (now >= ev.start && now < ev.end) ? `<span class="live" style="color:${r.color}">LIVE</span>` : '';
         track += `<div class="block" style="left:${l}%;width:${w}%;background:${r.color};">
-          ${live}<div class="bt">${hhmm(ev.start)} - ${hhmm(ev.end)}</div>
+          ${live}<div class="bt">${formatTime(ev.start)} - ${formatTime(ev.end)}</div>
           <div class="bn">${escapeHtml(ev.title)}</div>
           ${ev.sub ? `<div class="bp">${escapeHtml(ev.sub)}</div>` : ''}</div>`;
       }
-      // free gaps
-      for (const g of gaps(d.events, H0, H1)){
-        const l = clamp((g.s-H0)/span*100), w = clamp((g.e-H0)/span*100) - l;
-        if (w < 3) continue;
-        track += `<div class="block free" style="left:${l}%;width:${w}%;">
-          <div class="bt">${hourLbl(g.s)} - ${hourLbl(g.e)}</div><div class="bn">Free</div></div>`;
-      }
     }
-    if (nowH >= H0 && nowH <= H1) track += `<div class="nowline" style="left:${(nowH-H0)/span*100}%;"></div>`;
 
-    html += `<div class="row" data-room="${escapeAttr(r.name)}">
+    html += `<div class="row" style="border-left-color:${r.color};">
       <div class="row-head">
-        <div class="room-tile" style="background:${r.color};">${iconFor(r.name)}</div>
-        <div><div class="room-name">${escapeHtml(r.name)}</div>
-        <div class="room-status ${statusCls}"><span class="rd"></span>${statusTxt}</div></div>
+        <div class="room-tile" style="background:${r.color};">${iconFor()}</div>
+        <div class="room-name">${escapeHtml(r.name)}</div>
+        <span class="room-dot ${dotCls}"></span>
       </div>
       <div class="track">${track}</div>
       <div class="kebab">⋮</div>
     </div>`;
   }
-  $('rows').innerHTML = html || '<div style="padding:24px;color:#94a3b8;">No rooms match. Clear the search or press F10.</div>';
+  $('rows').innerHTML = html || '<div style="padding:24px;color:#94a3b8;">All rooms hidden. Press F10 for settings.</div>';
 
-  // footer stats
   $('stTotal').textContent = CONFIG.calendars.length;
   $('stOnline').textContent = cOnline;
   $('stOffline').textContent = cOffline;
   $('stBusy').textContent = cBusy;
   $('stFree').textContent = cFree;
+  $('onlineCount').textContent = cOnline + ' / ' + cConfigured + ' online';
+  $('onlineCount').style.color = (cOffline===0 && cConfigured>0) ? '#16a34a' : (cConfigured===0 ? '#94a3b8' : '#e11d2a');
 
-  // system status
-  const allOnline = cOffline === 0 && cConfigured > 0;
-  $('sysStatus').textContent = cConfigured === 0 ? 'No feeds configured' : (allOnline ? 'All Systems Online' : cOffline + ' room(s) offline');
-  $('sysStatus').style.color = allOnline ? '#16a34a' : (cConfigured===0 ? '#94a3b8' : '#e11d2a');
-  $('sysDot').style.background = allOnline ? '#16a34a' : (cConfigured===0 ? '#cbd5e1' : '#e11d2a');
-
-  // alerts badge = offline count
-  const badge = $('alertBadge');
-  if (cOffline > 0){ badge.textContent = cOffline; badge.classList.remove('hidden'); } else badge.classList.add('hidden');
-
-  const total = CONFIG.calendars.length;
-  const shown = rooms.length;
-  $('roomsShownLbl').textContent = shown + ' of ' + total + ' rooms shown';
+  updateNowLine();
 }
 
-function clamp(v){ return Math.max(0, Math.min(100, v)); }
-function hourLbl(h){ const H=Math.floor(h), M=Math.round((h-H)*60); return pad(H)+':'+pad(M); }
-function gaps(events, H0, H1){
-  const res = []; let cursor = H0;
-  const sorted = events.map(e => ({ s:e.start.getHours()+e.start.getMinutes()/60, e:e.end.getHours()+e.end.getMinutes()/60 }))
-    .sort((a,b)=>a.s-b.s);
-  for (const e of sorted){ if (e.s > cursor + 0.05) res.push({ s:cursor, e:Math.min(e.s,H1) }); cursor = Math.max(cursor, e.e); }
-  if (cursor < H1 - 0.05) res.push({ s:cursor, e:H1 });
-  return res;
-}
-
-/* ---- Timeline axis ---- */
+/* ---- time axis ---- */
 function buildAxis(){
   const H0 = Math.round(parseHour(CONFIG.settings.dayStart, 8));
   const H1 = Math.round(parseHour(CONFIG.settings.dayEnd, 18));
   const span = Math.max(1, H1 - H0);
   let html = '';
   for (let h = H0; h <= H1; h++){
-    html += `<div class="hr" style="left:${(h-H0)/span*100}%;">${pad(h)}:00</div>`;
+    const L = (h-H0)/span*100;
+    html += `<div class="hr" style="left:${L}%;">${axisHourLabel(h)}</div>`;
+    html += `<div class="tick" style="left:${L}%;"></div>`;
+    if (h < H1) html += `<div class="tick half" style="left:${(h+0.5-H0)/span*100}%;"></div>`;
   }
   $('axisHours').innerHTML = html;
-  updateNowBadge();
+  updateNowLine();
 }
-function updateNowBadge(){
+function updateNowLine(){
   const H0 = parseHour(CONFIG.settings.dayStart, 8);
   const H1 = parseHour(CONFIG.settings.dayEnd, 18);
   const span = Math.max(1, H1 - H0);
   const n = new Date(); const nowH = n.getHours()+n.getMinutes()/60;
-  let badge = $('axisHours').querySelector('.now-badge');
-  if (nowH < H0 || nowH > H1){ if (badge) badge.remove(); return; }
-  if (!badge){ badge = document.createElement('div'); badge.className = 'now-badge'; $('axisHours').appendChild(badge); }
-  badge.style.left = (nowH-H0)/span*100 + '%';
-  badge.textContent = hhmm(n);
+  const nl = $('nowLine'), nt = $('nowTag');
+  if (nowH < H0 || nowH > H1){ nl.classList.add('hidden'); nt.classList.add('hidden'); return; }
+  document.documentElement.style.setProperty('--now-frac', (nowH-H0)/span);
+  nl.classList.remove('hidden'); nt.classList.remove('hidden');
+  nt.textContent = formatTime(n);
 }
 
-/* ---- Clock / date / countdown ---- */
+/* ---- fonts / palette ---- */
+function applyFonts(){
+  const f = Object.assign({}, DEFAULT_FONTS, CONFIG.settings.fonts || {});
+  const s = document.documentElement.style;
+  s.setProperty('--fs-heading', f.heading + 'px');
+  s.setProperty('--fs-caption', f.caption + 'px');
+  s.setProperty('--fs-timeline', f.timeline + 'px');
+  s.setProperty('--fs-roomname', f.roomName + 'px');
+  s.setProperty('--fs-session-title', f.sessionTitle + 'px');
+  s.setProperty('--fs-session-detail', f.sessionDetail + 'px');
+}
+function applyPalette(name){
+  const pal = PALETTES[name] || PALETTES.default;
+  CONFIG.calendars.forEach((r, i) => { r.color = pal[i % pal.length]; });
+}
+
+/* ---- clock / countdown ---- */
 function tickClock(){
   const n = new Date();
-  $('todayDate').textContent = DAYS[n.getDay()] + ', ' + n.getDate() + ' ' + MONTHS[n.getMonth()] + ' ' + n.getFullYear();
-  updateNowBadge();
+  $('todayDate').textContent = formatDate(n);
+  $('clock').textContent = formatTime(n);
+  updateNowLine();
 }
 function scheduleRefresh(){
   if (refreshTimer) clearInterval(refreshTimer);
-  const mins = parseInt(CONFIG.settings.refreshMinutes,10) || 5;
+  const mins = parseInt(CONFIG.settings.refreshMinutes,10) || 30;
   refreshTimer = setInterval(refreshAll, mins*60000);
   resetCountdown();
 }
-function resetCountdown(){
-  const mins = parseInt(CONFIG.settings.refreshMinutes,10) || 5;
-  nextRefreshAt = Date.now() + mins*60000;
-}
+function resetCountdown(){ nextRefreshAt = Date.now() + (parseInt(CONFIG.settings.refreshMinutes,10)||30)*60000; }
 function tickCountdown(){
-  const ms = Math.max(0, nextRefreshAt - Date.now());
-  const totalSec = Math.floor(ms/1000);
-  if (totalSec >= 3600){
-    const h = Math.floor(totalSec/3600), m = Math.floor((totalSec%3600)/60);
-    $('countdown').textContent = h + 'h ' + pad(m) + 'm';
-  } else {
-    $('countdown').textContent = pad(Math.floor(totalSec/60)) + ':' + pad(totalSec%60);
-  }
+  const sec = Math.max(0, Math.floor((nextRefreshAt - Date.now())/1000));
+  $('countdown').textContent = sec >= 3600 ? (Math.floor(sec/3600)+'h '+pad(Math.floor((sec%3600)/60))+'m') : (pad(Math.floor(sec/60))+':'+pad(sec%60));
 }
 
-/* ---- Rooms dropdown (hide/unhide) ---- */
-function buildRoomsMenu(){
-  const hidden = new Set(CONFIG.settings.hiddenRooms || []);
-  $('roomsMenu').innerHTML = CONFIG.calendars.map((r,i) =>
-    `<label><input type="checkbox" data-i="${i}" ${hidden.has(r.name)?'':'checked'}/>
-     <span style="width:10px;height:10px;border-radius:3px;background:${r.color};display:inline-block;"></span>${escapeHtml(r.name)}</label>`
-  ).join('');
-  $('roomsMenu').querySelectorAll('input').forEach(cb => {
-    cb.onchange = () => {
-      const r = CONFIG.calendars[+cb.dataset.i];
-      const set = new Set(CONFIG.settings.hiddenRooms || []);
-      if (cb.checked) set.delete(r.name); else set.add(r.name);
-      CONFIG.settings.hiddenRooms = [...set];
-      window.kiosk.saveConfig(CONFIG);
-      render();
-    };
-  });
-}
-
-/* ---- Settings panel ---- */
+/* ---- settings ---- */
 function openSettings(){
   buildRoomEditor();
+  fillSelect($('setPalette'), Object.keys(PALETTES).map(k => [k, k[0].toUpperCase()+k.slice(1)]), CONFIG.settings.palette || 'default');
+  fillSelect($('setDateFormat'), DATE_FORMATS.map(([k,ex]) => [k, ex]), CONFIG.settings.dateFormat || 'ddd-d-mon-yyyy');
+  fillSelect($('setRefresh2'), REFRESH_OPTS, String(CONFIG.settings.refreshMinutes || 30));
+  $('setTimeFormat').value = CONFIG.settings.timeFormat || '24';
+  const f = Object.assign({}, DEFAULT_FONTS, CONFIG.settings.fonts || {});
+  $('fsHeading').value = f.heading; $('fsCaption').value = f.caption; $('fsTimeline').value = f.timeline;
+  $('fsRoomName').value = f.roomName; $('fsSessionTitle').value = f.sessionTitle; $('fsSessionDetail').value = f.sessionDetail;
   $('setDayStart').value = CONFIG.settings.dayStart || '08:00';
   $('setDayEnd').value = CONFIG.settings.dayEnd || '18:00';
   $('setFullscreen').checked = !!CONFIG.settings.startFullscreen;
@@ -308,6 +304,9 @@ function openSettings(){
   $('overlay').classList.remove('hidden');
 }
 function closeSettings(){ $('overlay').classList.add('hidden'); }
+function fillSelect(el, pairs, selected){
+  el.innerHTML = pairs.map(([v,l]) => `<option value="${escapeAttr(v)}"${String(v)===String(selected)?' selected':''}>${escapeHtml(l)}</option>`).join('');
+}
 function buildRoomEditor(){
   const hidden = new Set(CONFIG.settings.hiddenRooms || []);
   const wrap = $('roomList'); wrap.innerHTML = '';
@@ -322,9 +321,7 @@ function buildRoomEditor(){
        <button class="remove-room" data-i="${i}">✕</button>`;
     wrap.appendChild(div);
   });
-  wrap.querySelectorAll('.remove-room').forEach(b => {
-    b.onclick = () => { CONFIG.calendars.splice(+b.dataset.i,1); buildRoomEditor(); };
-  });
+  wrap.querySelectorAll('.remove-room').forEach(b => { b.onclick = () => { CONFIG.calendars.splice(+b.dataset.i,1); buildRoomEditor(); }; });
 }
 function collectSettings(){
   const hidden = [];
@@ -337,115 +334,76 @@ function collectSettings(){
     if (!item.querySelector('[data-k=show]').checked) hidden.push(cal.name);
   });
   CONFIG.settings.hiddenRooms = hidden;
+  CONFIG.settings.palette = $('setPalette').value;
+  CONFIG.settings.timeFormat = $('setTimeFormat').value;
+  CONFIG.settings.dateFormat = $('setDateFormat').value;
+  CONFIG.settings.refreshMinutes = parseInt($('setRefresh2').value,10);
+  CONFIG.settings.fonts = {
+    heading:+$('fsHeading').value, caption:+$('fsCaption').value, timeline:+$('fsTimeline').value,
+    roomName:+$('fsRoomName').value, sessionTitle:+$('fsSessionTitle').value, sessionDetail:+$('fsSessionDetail').value
+  };
   CONFIG.settings.dayStart = $('setDayStart').value || '08:00';
   CONFIG.settings.dayEnd = $('setDayEnd').value || '18:00';
   CONFIG.settings.startFullscreen = $('setFullscreen').checked;
   CONFIG.settings.autoStartOnBoot = $('setAutoStart').checked;
 }
 
-/* ---- Init ---- */
+/* ---- chrome (hide bottom) ---- */
+function applyChrome(){
+  $('app').classList.toggle('hide-bottom', !!CONFIG.settings.hideBottom);
+  $('fcBottom').classList.toggle('on', !!CONFIG.settings.hideBottom);
+}
+
+/* ---- init ---- */
 async function init(){
   CONFIG = await window.kiosk.getConfig();
 
-  // refresh dropdown
-  $('refreshSel').innerHTML = REFRESH_OPTS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
-  $('refreshSel').value = String(CONFIG.settings.refreshMinutes || 5);
-  $('refreshSel').onchange = () => {
-    CONFIG.settings.refreshMinutes = parseInt($('refreshSel').value,10);
-    window.kiosk.saveConfig(CONFIG); scheduleRefresh();
-  };
+  applyFonts();
+  applyChrome();
 
-  // view size
-  $('rows').className = 'size-' + (CONFIG.settings.viewSize || 'normal');
-  document.querySelectorAll('.seg').forEach(seg => {
-    seg.classList.toggle('active', seg.dataset.size === (CONFIG.settings.viewSize||'normal'));
-    seg.onclick = () => {
-      document.querySelectorAll('.seg').forEach(s => s.classList.remove('active'));
-      seg.classList.add('active');
-      CONFIG.settings.viewSize = seg.dataset.size;
-      $('rows').className = 'size-' + seg.dataset.size;
-      window.kiosk.saveConfig(CONFIG); render();
-    };
-  });
+  fillSelect($('refreshSel'), REFRESH_OPTS, String(CONFIG.settings.refreshMinutes || 30));
+  $('refreshSel').onchange = () => { CONFIG.settings.refreshMinutes = parseInt($('refreshSel').value,10); window.kiosk.saveConfig(CONFIG); scheduleRefresh(); };
 
-  // rooms dropdown
-  $('roomsToggleBtn').onclick = (e) => { e.stopPropagation(); buildRoomsMenu(); $('roomsMenu').classList.toggle('hidden'); };
-  document.addEventListener('click', () => $('roomsMenu').classList.add('hidden'));
-  $('roomsMenu').addEventListener('click', e => e.stopPropagation());
-
-  // search
-  $('searchInput').oninput = () => { searchTerm = $('searchInput').value.trim().toLowerCase(); render(); };
-
-  // sidebar collapse (arrow flips « / »)
-  function applySidebar(){
-    const c = !!CONFIG.settings.sidebarCollapsed;
-    $('app').classList.toggle('collapsed', c);
-    $('collapseIco').textContent = c ? '»' : '«';
-  }
-  $('collapseBtn').onclick = () => {
-    CONFIG.settings.sidebarCollapsed = !CONFIG.settings.sidebarCollapsed;
-    applySidebar(); window.kiosk.saveConfig(CONFIG);
-  };
-  applySidebar();
-
-  // floating quick controls: fullscreen, hide top, hide bottom, settings
-  function applyChrome(){
-    $('content').classList.toggle('hide-top', !!CONFIG.settings.hideTop);
-    $('content').classList.toggle('hide-bottom', !!CONFIG.settings.hideBottom);
-    $('fcTop').classList.toggle('on', !!CONFIG.settings.hideTop);
-    $('fcBottom').classList.toggle('on', !!CONFIG.settings.hideBottom);
-  }
   $('fcFull').onclick = () => window.kiosk.toggleFullscreen();
-  $('fcTop').onclick = () => { CONFIG.settings.hideTop = !CONFIG.settings.hideTop; applyChrome(); window.kiosk.saveConfig(CONFIG); };
   $('fcBottom').onclick = () => { CONFIG.settings.hideBottom = !CONFIG.settings.hideBottom; applyChrome(); window.kiosk.saveConfig(CONFIG); };
   $('fcSettings').onclick = () => openSettings();
-  applyChrome();
-  document.querySelectorAll('[data-nav]').forEach(el => {
-    el.onclick = () => {
-      const nav = el.dataset.nav;
-      if (nav === 'settings' || nav === 'rooms'){ openSettings(); return; }
-      if (nav === 'export'){ exportCsv(); return; }
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      if (nav === 'calendar') el.classList.add('active');
-    };
-  });
+  $('refreshNowBtn').onclick = () => refreshAll();
 
-  // settings wiring
   window.kiosk.onOpenSettings(() => openSettings());
   $('closeSettings').onclick = closeSettings;
   $('addRoom').onclick = () => { CONFIG.calendars.push({ name:'New room', url:'', color:'#2563eb', enabled:true }); buildRoomEditor(); };
+  $('applyPalette').onclick = () => { applyPalette($('setPalette').value); buildRoomEditor(); render(); };
   $('fsToggle').onclick = () => window.kiosk.toggleFullscreen();
   $('quitApp').onclick = () => window.kiosk.quit();
-  $('refreshNowBtn').onclick = () => refreshAll();
+
+  $('resetDefault').onclick = () => {
+    CONFIG.settings.fonts = Object.assign({}, DEFAULT_FONTS);
+    CONFIG.settings.palette = 'default';
+    CONFIG.settings.timeFormat = '24';
+    CONFIG.settings.dateFormat = 'ddd-d-mon-yyyy';
+    CONFIG.settings.dayStart = '08:00';
+    CONFIG.settings.dayEnd = '18:00';
+    CONFIG.settings.refreshMinutes = 30;
+    applyPalette('default');
+    openSettings(); // repopulate fields
+    applyFonts(); buildAxis(); render();
+  };
+
   $('saveSettings').onclick = async () => {
     collectSettings();
     await window.kiosk.saveConfig(CONFIG);
     closeSettings();
-    buildAxis(); scheduleRefresh(); await refreshAll();
+    applyFonts(); buildAxis(); scheduleRefresh(); await refreshAll();
   };
 
   buildAxis();
   tickClock();
-  setInterval(tickClock, 15000);
+  setInterval(tickClock, 10000);
   setInterval(render, 60000);
   setInterval(tickCountdown, 1000);
 
   scheduleRefresh();
   await refreshAll();
-}
-
-function exportCsv(){
-  const rows = [['Room','Status','Start','End','Title']];
-  for (const r of CONFIG.calendars){
-    const d = lastData[r.name] || {};
-    if (!d.events || !d.events.length){ rows.push([r.name, d.online?'online':'offline','','','']); continue; }
-    for (const e of d.events) rows.push([r.name,'online',hhmm(e.start),hhmm(e.end),e.title]);
-  }
-  const csv = rows.map(r => r.map(c => '"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv' }));
-  a.download = 'room-schedule-' + new Date().toISOString().slice(0,10) + '.csv';
-  a.click();
 }
 
 init();

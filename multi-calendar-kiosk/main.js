@@ -38,10 +38,14 @@ const DEFAULT_CONFIG = {
     dayStart: '08:00',           // timeline start hour
     dayEnd: '18:00',             // timeline end hour
     hiddenRooms: [],             // names of rooms hidden from the board
-    viewSize: 'normal',          // 'compact' | 'normal' | 'large'
-    hideTop: false,              // hide header + toolbar
     hideBottom: false,           // hide footer summary
-    sidebarCollapsed: false,     // collapse left nav
+    timeFormat: '24',            // '12' | '24'
+    dateFormat: 'ddd-d-mon-yyyy',// see app.js formatDate()
+    palette: 'default',          // color palette name
+    fonts: {                     // per-area font sizes (px)
+      heading: 22, caption: 13, timeline: 16,
+      roomName: 20, sessionTitle: 14, sessionDetail: 11
+    },
     startFullscreen: true,
     autoStartOnBoot: false
   }
