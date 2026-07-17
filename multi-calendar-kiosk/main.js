@@ -46,6 +46,7 @@ const DEFAULT_CONFIG = {
     boldText: false,             // bold all text
     headingColor: '',            // '' = auto (theme); else hex
     textColor: '',               // '' = auto (theme); else hex
+    dateColor: '',               // '' = auto; else hex (header date)
     fonts: {                     // per-area font sizes (px)
       heading: 22, caption: 13, timeline: 16,
       roomName: 20, sessionTitle: 14, sessionDetail: 11

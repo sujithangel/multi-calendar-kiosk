@@ -6,6 +6,7 @@ let lastData = {};          // name -> { raw, events, online, configured, error 
 let refreshing = false;
 let selectedDate = startOfDay(new Date());
 let roomsEditMode = false;
+let cfgBackup = null;
 
 const $ = (id) => document.getElementById(id);
 const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -23,7 +24,14 @@ const PALETTES = {
   sunset:    ['#f97316','#ea580c','#dc2626','#e11d48','#db2777','#c026d3','#f59e0b','#d97706','#b45309','#be123c','#9d174d','#a21caf','#b91c1c','#c2410c'],
   forest:    ['#16a34a','#15803d','#65a30d','#4d7c0f','#0d9488','#0f766e','#22c55e','#166534','#3f6212','#14532d','#047857','#065f46','#4ade80','#84cc16'],
   grayscale: ['#334155','#475569','#64748b','#1e293b','#52525b','#57534e','#71717a','#0f172a','#3f3f46','#44403c','#525252','#404040','#525b67','#374151'],
-  vibrant:   ['#7c3aed','#db2777','#e11d2a','#f59e0b','#16a34a','#0891b2','#2563eb','#9333ea','#c026d3','#ea580c','#ca8a04','#059669','#0284c7','#4f46e5']
+  vibrant:   ['#7c3aed','#db2777','#e11d2a','#f59e0b','#16a34a','#0891b2','#2563eb','#9333ea','#c026d3','#ea580c','#ca8a04','#059669','#0284c7','#4f46e5'],
+  pastel:    ['#6b8fd6','#5fb3b3','#57b58a','#7cb342','#b9a13e','#d1873f','#d97b66','#d16a7c','#c471a8','#9b7fd1','#7b78d6','#5b9bd1','#a06fd1','#c08a4a'],
+  jewel:     ['#1e40af','#0e7490','#047857','#4d7c0f','#a16207','#b45309','#c2410c','#b91c1c','#be123c','#9d174d','#86198f','#6b21a8','#5b21b6','#3730a3'],
+  candy:     ['#ff6b6b','#f06595','#cc5de8','#845ef7','#5c7cfa','#339af0','#22b8cf','#20c997','#51cf66','#94d82d','#fcc419','#ff922b','#ff8787','#e64980'],
+  earth:     ['#6d4c41','#8d6e63','#a1887f','#827717','#9e9d24','#558b2f','#33691e','#4e342e','#795548','#5d4037','#3e2723','#607d8b','#455a64','#78909c'],
+  neon:      ['#22d3ee','#a3e635','#facc15','#fb923c','#f472b6','#c084fc','#818cf8','#38bdf8','#34d399','#fbbf24','#f87171','#e879f9','#60a5fa','#4ade80'],
+  corporate: ['#1f4e79','#2e75b6','#2b7a78','#3aafa9','#547aa5','#41729f','#5885af','#274472','#41729f','#5885af','#1e3d59','#3d5a80','#4a6fa5','#2c5f8a'],
+  ocean2:    ['#00485f','#016d7f','#02a8b6','#03cccf','#1fbfb8','#2f9fa8','#0d7377','#14a1a8','#0b6e79','#118a90','#0e5e6b','#177e88','#0a4f5c','#1f8f96']
 };
 const DEFAULT_FONTS = { heading:22, caption:13, timeline:16, roomName:20, sessionTitle:14, sessionDetail:11 };
 
@@ -177,11 +185,16 @@ function render(){
     if (today && hasData){ if (busyNow) cBusy++; else cFree++; }
   }
 
+  const nowH = now.getHours() + now.getMinutes()/60;
+  const nowInRange = today && nowH >= H0 && nowH <= H1;
+  const nowPct = clamp((nowH - H0)/span*100);
+
   let html = '';
   for (const r of rooms){
     const d = lastData[r.name] || { events:[], online:false, configured:!!(r.url&&r.url.trim()) };
     const hasEvents = d.events && d.events.length;
     const dotCls = !d.configured ? 'na' : (d.online ? 'on' : 'off');
+    const rowBusy = today && hasEvents && d.events.some(e => now >= e.start && now < e.end);
 
     let track = '';
     if (!d.configured || (!d.online && !hasEvents)){
@@ -202,15 +215,17 @@ function render(){
         const eH = ev.end.getHours()+ev.end.getMinutes()/60;
         const l = clamp((sH-H0)/span*100), w = clamp((eH-H0)/span*100) - l;
         if (w <= 0) continue;
-        const live = (today && now >= ev.start && now < ev.end) ? `<span class="live" style="color:${r.color}">LIVE</span>` : '';
-        track += `<div class="block" style="left:${l}%;width:${w}%;background:${r.color};">
+        const isLive = today && now >= ev.start && now < ev.end;
+        const live = isLive ? `<span class="live" style="color:${r.color}"><span class="live-dot"></span>LIVE</span>` : '';
+        track += `<div class="block${isLive?' live-block':''}" style="left:${l}%;width:${w}%;background:${r.color};">
           ${live}<div class="bt">${formatTime(ev.start)} - ${formatTime(ev.end)}</div>
           <div class="bn">${escapeHtml(ev.title)}</div>
           ${ev.sub ? `<div class="bp">${escapeHtml(ev.sub)}</div>` : ''}</div>`;
       }
     }
+    if (nowInRange) track += `<div class="rownow" style="left:${nowPct}%;"></div>`;
 
-    html += `<div class="row">
+    html += `<div class="row${rowBusy?' busy-now':''}">
       <div class="row-head">
         <div class="room-tile" style="background:${r.color};">${iconFor()}</div>
         <div class="room-name">${escapeHtml(r.name)}</div>
@@ -249,20 +264,23 @@ function buildAxis(){
   updateNowLine();
 }
 function updateNowLine(){
-  const nl = $('nowLine'), nt = $('nowTag');
-  const board = $('board'); const track = document.querySelector('#rows .track');
+  const nt = $('nowTag');
+  const axis = $('axisHours');
   const H0 = parseHour(CONFIG.settings.dayStart, 8), H1 = parseHour(CONFIG.settings.dayEnd, 18);
   const span = Math.max(1, H1 - H0);
   const n = new Date(); const nowH = n.getHours()+n.getMinutes()/60;
-  if (!board || !track || !isTodaySelected() || nowH < H0 || nowH > H1){
-    if (nl) nl.classList.add('hidden'); if (nt) nt.classList.add('hidden'); return;
+  const show = isTodaySelected() && nowH >= H0 && nowH <= H1;
+  const pct = Math.max(0, Math.min(100, (nowH-H0)/span*100));
+  // per-track red lines (rendered in render(); keep them in sync each tick)
+  document.querySelectorAll('.track .rownow').forEach(el => { el.style.left = pct + '%'; el.style.display = show ? '' : 'none'; });
+  // axis time badge (moved inside axisHours on init)
+  if (nt){
+    if (!show){ nt.classList.add('hidden'); return; }
+    if (nt.parentElement !== axis && axis) axis.appendChild(nt);
+    nt.style.left = pct + '%';
+    nt.textContent = formatTime(n);
+    nt.classList.remove('hidden');
   }
-  const br = board.getBoundingClientRect(), tr = track.getBoundingClientRect();
-  const frac = Math.max(0, Math.min(1, (nowH-H0)/span));
-  const x = (tr.left - br.left) + frac * tr.width;
-  nl.style.left = x + 'px'; nt.style.left = x + 'px';
-  nl.classList.remove('hidden'); nt.classList.remove('hidden');
-  nt.textContent = formatTime(n);
 }
 
 /* ---- theme / fonts / palette ---- */
@@ -282,6 +300,7 @@ function applyTheme(){
   const b = document.body.style;
   if (CONFIG.settings.headingColor) b.setProperty('--heading-color', CONFIG.settings.headingColor); else b.removeProperty('--heading-color');
   if (CONFIG.settings.textColor) b.setProperty('--text', CONFIG.settings.textColor); else b.removeProperty('--text');
+  if (CONFIG.settings.dateColor) b.setProperty('--date-color', CONFIG.settings.dateColor); else b.removeProperty('--date-color');
 }
 function applyPalette(name){
   const pal = PALETTES[name] || PALETTES.default;
@@ -311,6 +330,7 @@ function fillSelect(el, pairs, selected){
   el.innerHTML = pairs.map(([v,l]) => `<option value="${escapeAttr(v)}"${String(v)===String(selected)?' selected':''}>${escapeHtml(l)}</option>`).join('');
 }
 function openSettings(){
+  cfgBackup = JSON.parse(JSON.stringify(CONFIG));   // snapshot for live-preview revert
   roomsEditMode = false;
   $('editRooms').textContent = 'Edit rooms';
   $('addRoom').classList.add('hidden');
@@ -323,11 +343,10 @@ function openSettings(){
   $('setTimeFormat').value = CONFIG.settings.timeFormat || '24';
   $('setBold').checked = !!CONFIG.settings.boldText;
 
-  const hc = CONFIG.settings.headingColor, tc = CONFIG.settings.textColor;
+  const hc = CONFIG.settings.headingColor, tc = CONFIG.settings.textColor, dcol = CONFIG.settings.dateColor;
   $('autoHeading').checked = !hc; $('setHeadingColor').value = hc || '#0f172a'; $('setHeadingColor').disabled = !hc;
   $('autoText').checked = !tc; $('setTextColor').value = tc || '#0f172a'; $('setTextColor').disabled = !tc;
-  $('autoHeading').onchange = () => { $('setHeadingColor').disabled = $('autoHeading').checked; };
-  $('autoText').onchange = () => { $('setTextColor').disabled = $('autoText').checked; };
+  $('autoDate').checked = !dcol; $('setDateColor').value = dcol || '#e11d2a'; $('setDateColor').disabled = !dcol;
 
   const f = Object.assign({}, DEFAULT_FONTS, CONFIG.settings.fonts || {});
   $('fsHeading').value = f.heading; $('fsCaption').value = f.caption; $('fsTimeline').value = f.timeline;
@@ -338,7 +357,12 @@ function openSettings(){
   $('setAutoStart').checked = !!CONFIG.settings.autoStartOnBoot;
   $('overlay').classList.remove('hidden');
 }
-function closeSettings(){ $('overlay').classList.add('hidden'); }
+function closeSettings(revert){
+  if (revert && cfgBackup){ CONFIG = cfgBackup; applyFonts(); applyTheme(); buildAxis(); render(); }
+  cfgBackup = null;
+  $('overlay').classList.add('hidden');
+}
+function previewApply(){ collectSettings(); applyFonts(); applyTheme(); buildAxis(); render(); }
 function switchTab(name){
   document.querySelectorAll('.stab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.tabpane').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== name));
@@ -403,6 +427,7 @@ function collectSettings(){
   CONFIG.settings.boldText = $('setBold').checked;
   CONFIG.settings.headingColor = $('autoHeading').checked ? '' : $('setHeadingColor').value;
   CONFIG.settings.textColor = $('autoText').checked ? '' : $('setTextColor').value;
+  CONFIG.settings.dateColor = $('autoDate').checked ? '' : $('setDateColor').value;
   CONFIG.settings.timeFormat = $('setTimeFormat').value;
   CONFIG.settings.dateFormat = $('setDateFormat').value;
   CONFIG.settings.refreshMinutes = parseInt($('setRefresh2').value,10);
@@ -439,10 +464,19 @@ async function init(){
   $('fcSettings').onclick = () => openSettings();
 
   window.kiosk.onOpenSettings(() => openSettings());
-  $('closeSettings').onclick = closeSettings;
+  $('closeSettings').onclick = () => closeSettings(true);
 
   // settings tabs
   document.querySelectorAll('.stab').forEach(t => { t.onclick = () => switchTab(t.dataset.tab); });
+
+  // live preview of theme/appearance/font/date changes
+  ['setTheme','setBold','setHeadingColor','setTextColor','setDateColor','setTimeFormat','setDateFormat',
+   'fsHeading','fsCaption','fsTimeline','fsRoomName','fsSessionTitle','fsSessionDetail','setDayStart','setDayEnd']
+    .forEach(id => { const el = $(id); if (el){ el.addEventListener('change', previewApply); el.addEventListener('input', previewApply); } });
+  $('autoHeading').addEventListener('change', () => { $('setHeadingColor').disabled = $('autoHeading').checked; previewApply(); });
+  $('autoText').addEventListener('change', () => { $('setTextColor').disabled = $('autoText').checked; previewApply(); });
+  $('autoDate').addEventListener('change', () => { $('setDateColor').disabled = $('autoDate').checked; previewApply(); });
+  $('setPalette').addEventListener('change', () => { applyPalette($('setPalette').value); previewApply(); });
 
   // rooms: guarded edit mode
   $('editRooms').onclick = () => {
@@ -457,19 +491,20 @@ async function init(){
   $('quitApp').onclick = () => window.kiosk.quit();
 
   $('resetDefault').onclick = () => {
+    const bak = cfgBackup;   // preserve original snapshot so Close can still revert
     Object.assign(CONFIG.settings, {
       fonts: Object.assign({}, DEFAULT_FONTS), palette:'default', theme:'light', boldText:false,
-      headingColor:'', textColor:'', timeFormat:'24', dateFormat:'ddd-d-mon-yyyy',
+      headingColor:'', textColor:'', dateColor:'', timeFormat:'24', dateFormat:'ddd-d-mon-yyyy',
       dayStart:'08:00', dayEnd:'18:00', refreshMinutes:30
     });
     applyPalette('default');
-    applyFonts(); applyTheme(); openSettings(); buildAxis(); render();
+    applyFonts(); applyTheme(); openSettings(); cfgBackup = bak; buildAxis(); render();
   };
 
   $('saveSettings').onclick = async () => {
     collectSettings();
     await window.kiosk.saveConfig(CONFIG);
-    closeSettings();
+    closeSettings(false);
     applyFonts(); applyTheme(); buildAxis(); scheduleRefresh(); await refreshAll();
   };
 
