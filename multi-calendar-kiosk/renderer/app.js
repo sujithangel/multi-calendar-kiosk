@@ -1,36 +1,37 @@
 /* Classroom Daily View - renderer logic */
 
 let CONFIG = null;
-let refreshTimer = null, countdownTimer = null, nextRefreshAt = 0;
-let lastData = {};
+let refreshTimer = null, nextRefreshAt = 0;
+let lastData = {};          // name -> { raw, events, online, configured, error }
 let refreshing = false;
+let selectedDate = startOfDay(new Date());
+let roomsEditMode = false;
 
 const $ = (id) => document.getElementById(id);
 const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DAYS_LONG = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const MON_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MON_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
 const REFRESH_OPTS = [[5,'5 min'],[15,'15 min'],[30,'30 min'],[60,'1 hour'],[240,'4 hours'],[360,'6 hours'],[480,'8 hours'],[720,'12 hours'],[1440,'24 hours']];
 const DATE_FORMATS = [
-  ['ddd-d-mon-yyyy', 'Wed, 16 Jul 2026'],
-  ['weekday-d-month-yyyy', 'Wednesday, 16 July 2026'],
-  ['d-mon-yyyy', '16 Jul 2026'],
-  ['dd/mm/yyyy', '16/07/2026'],
-  ['mm/dd/yyyy', '07/16/2026'],
-  ['yyyy-mm-dd', '2026-07-16']
+  ['ddd-d-mon-yyyy','Wed, 16 Jul 2026'],['weekday-d-month-yyyy','Wednesday, 16 July 2026'],
+  ['d-mon-yyyy','16 Jul 2026'],['dd/mm/yyyy','16/07/2026'],['mm/dd/yyyy','07/16/2026'],['yyyy-mm-dd','2026-07-16']
 ];
 const PALETTES = {
   default:   ['#2563eb','#0891b2','#0d9488','#16a34a','#65a30d','#d97706','#ea580c','#dc2626','#db2777','#9333ea','#4f46e5','#0284c7','#7c3aed','#b45309'],
   ocean:     ['#0ea5e9','#0891b2','#0d9488','#0284c7','#2563eb','#3b82f6','#06b6d4','#14b8a6','#0369a1','#1d4ed8','#0e7490','#155e75','#1e40af','#0f766e'],
   sunset:    ['#f97316','#ea580c','#dc2626','#e11d48','#db2777','#c026d3','#f59e0b','#d97706','#b45309','#be123c','#9d174d','#a21caf','#b91c1c','#c2410c'],
-  forest:    ['#16a34a','#15803d','#65a30d','#4d7c0f','#0d9488','#0f766e','#65a30d','#166534','#3f6212','#14532d','#047857','#065f46','#166534','#14532d'],
-  grayscale: ['#334155','#475569','#64748b','#1e293b','#334155','#475569','#64748b','#0f172a','#334155','#475569','#64748b','#1e293b','#334155','#475569'],
+  forest:    ['#16a34a','#15803d','#65a30d','#4d7c0f','#0d9488','#0f766e','#22c55e','#166534','#3f6212','#14532d','#047857','#065f46','#4ade80','#84cc16'],
+  grayscale: ['#334155','#475569','#64748b','#1e293b','#52525b','#57534e','#71717a','#0f172a','#3f3f46','#44403c','#525252','#404040','#525b67','#374151'],
   vibrant:   ['#7c3aed','#db2777','#e11d2a','#f59e0b','#16a34a','#0891b2','#2563eb','#9333ea','#c026d3','#ea580c','#ca8a04','#059669','#0284c7','#4f46e5']
 };
 const DEFAULT_FONTS = { heading:22, caption:13, timeline:16, roomName:20, sessionTitle:14, sessionDetail:11 };
 
 function pad(n){ return n < 10 ? '0' + n : '' + n; }
+function startOfDay(d){ const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function addDays(d,n){ const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+function isTodaySelected(){ return selectedDate.getTime() === startOfDay(new Date()).getTime(); }
+function toISODate(d){ return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); }
 function parseHour(s, f){ const m = /^(\d{1,2}):(\d{2})$/.exec(s || ''); return m ? (+m[1] + (+m[2])/60) : f; }
 function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function escapeAttr(s){ return escapeHtml(s).replace(/'/g,'&#39;'); }
@@ -43,7 +44,7 @@ function formatTime(dt){
 }
 function fmtHourFloat(h){ const d = new Date(); d.setHours(Math.floor(h), Math.round((h-Math.floor(h))*60), 0, 0); return formatTime(d); }
 function axisHourLabel(h){
-  if ((CONFIG.settings.timeFormat || '24') === '12'){ const ap = h>=12?'p':'a'; return (h%12||12) + ap; }
+  if ((CONFIG.settings.timeFormat || '24') === '12'){ const ap = h>=12?'pm':'am'; return (h%12||12) + ' ' + ap; }
   return String(h);
 }
 function formatDate(dt){
@@ -59,20 +60,20 @@ function formatDate(dt){
   }
 }
 
-/* ---- room icon (door / room) ---- */
+/* ---- room icon (door) ---- */
 function iconFor(){
   return '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
     + '<path d="M7 3h8a1 1 0 0 1 1 1v15H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M5 19h14"/>'
     + '<circle cx="13" cy="12" r="1" fill="#fff" stroke="none"/></svg>';
 }
 
-/* ---- ICS parsing: today's events ---- */
-function expandTodayEvents(text){
+/* ---- ICS parsing for a given date ---- */
+function expandEventsForDate(text, date){
   const out = [];
   const comp = new ICAL.Component(ICAL.parse(text));
   const vevents = comp.getAllSubcomponents('vevent');
-  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
-  const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate()+1);
+  const dayStart = startOfDay(date);
+  const dayEnd = addDays(dayStart, 1);
   const rStart = ICAL.Time.fromJSDate(dayStart, false);
   const rEnd = ICAL.Time.fromJSDate(dayEnd, false);
 
@@ -87,7 +88,7 @@ function expandTodayEvents(text){
     if (ev.isRecurring()){
       let iter; try { iter = ev.iterator(); } catch(e){ continue; }
       let next, guard = 0;
-      while ((next = iter.next()) && guard++ < 800){
+      while ((next = iter.next()) && guard++ < 1200){
         if (next.compare(rEnd) >= 0) break;
         let d; try { d = ev.getOccurrenceDetails(next); } catch(e){ continue; }
         if (d.endDate.compare(rStart) <= 0) continue;
@@ -128,14 +129,20 @@ async function refreshAll(){
       await sleep((i++) * 300);
       const prev = lastData[r.name] || {};
       const res = await fetchWithRetry(r.url, 1);
-      if (!res.ok){ lastData[r.name] = { events: prev.events || [], online:false, configured:true, error:res.error, stale:true }; return; }
-      try { lastData[r.name] = { events: expandTodayEvents(res.text), online:true, configured:true }; }
-      catch(e){ lastData[r.name] = { events: prev.events || [], online:false, configured:true, error:'Parse error', stale:true }; }
+      if (!res.ok){ lastData[r.name] = { raw: prev.raw, events: prev.events || [], online:false, configured:true, error:res.error, stale:true }; return; }
+      try { lastData[r.name] = { raw: res.text, events: expandEventsForDate(res.text, selectedDate), online:true, configured:true }; }
+      catch(e){ lastData[r.name] = { raw: res.text, events: prev.events || [], online:false, configured:true, error:'Parse error', stale:true }; }
       render();
     }));
   } finally { refreshing = false; }
   render();
   resetCountdown();
+}
+function recomputeFromCache(){
+  for (const r of CONFIG.calendars){
+    const d = lastData[r.name];
+    if (d && d.raw){ try { d.events = expandEventsForDate(d.raw, selectedDate); } catch(e){} }
+  }
 }
 
 /* ---- render ---- */
@@ -157,6 +164,7 @@ function render(){
   const H1 = parseHour(CONFIG.settings.dayEnd, 18);
   const span = Math.max(1, H1 - H0);
   const now = new Date();
+  const today = isTodaySelected();
   const rooms = visibleRooms();
 
   let cOnline=0, cOffline=0, cBusy=0, cFree=0, cConfigured=0;
@@ -165,8 +173,8 @@ function render(){
     const hasData = d.online || (d.events && d.events.length);
     if (d.configured) cConfigured++;
     if (d.online) cOnline++; else if (d.configured) cOffline++;
-    const busyNow = hasData && d.events.some(e => now >= e.start && now < e.end);
-    if (hasData){ if (busyNow) cBusy++; else cFree++; }
+    const busyNow = today && hasData && d.events.some(e => now >= e.start && now < e.end);
+    if (today && hasData){ if (busyNow) cBusy++; else cFree++; }
   }
 
   let html = '';
@@ -194,7 +202,7 @@ function render(){
         const eH = ev.end.getHours()+ev.end.getMinutes()/60;
         const l = clamp((sH-H0)/span*100), w = clamp((eH-H0)/span*100) - l;
         if (w <= 0) continue;
-        const live = (now >= ev.start && now < ev.end) ? `<span class="live" style="color:${r.color}">LIVE</span>` : '';
+        const live = (today && now >= ev.start && now < ev.end) ? `<span class="live" style="color:${r.color}">LIVE</span>` : '';
         track += `<div class="block" style="left:${l}%;width:${w}%;background:${r.color};">
           ${live}<div class="bt">${formatTime(ev.start)} - ${formatTime(ev.end)}</div>
           <div class="bn">${escapeHtml(ev.title)}</div>
@@ -202,7 +210,7 @@ function render(){
       }
     }
 
-    html += `<div class="row" style="border-left-color:${r.color};">
+    html += `<div class="row">
       <div class="row-head">
         <div class="room-tile" style="background:${r.color};">${iconFor()}</div>
         <div class="room-name">${escapeHtml(r.name)}</div>
@@ -212,7 +220,7 @@ function render(){
       <div class="kebab">⋮</div>
     </div>`;
   }
-  $('rows').innerHTML = html || '<div style="padding:24px;color:#94a3b8;">All rooms hidden. Press F10 for settings.</div>';
+  $('rows').innerHTML = html || '<div style="padding:24px;color:var(--text-muted);">All rooms hidden. Press F10 for settings.</div>';
 
   $('stTotal').textContent = CONFIG.calendars.length;
   $('stOnline').textContent = cOnline;
@@ -220,7 +228,7 @@ function render(){
   $('stBusy').textContent = cBusy;
   $('stFree').textContent = cFree;
   $('onlineCount').textContent = cOnline + ' / ' + cConfigured + ' online';
-  $('onlineCount').style.color = (cOffline===0 && cConfigured>0) ? '#16a34a' : (cConfigured===0 ? '#94a3b8' : '#e11d2a');
+  $('onlineCount').style.color = (cOffline===0 && cConfigured>0) ? '#16a34a' : (cConfigured===0 ? 'var(--text-muted)' : '#e11d2a');
 
   updateNowLine();
 }
@@ -241,18 +249,23 @@ function buildAxis(){
   updateNowLine();
 }
 function updateNowLine(){
-  const H0 = parseHour(CONFIG.settings.dayStart, 8);
-  const H1 = parseHour(CONFIG.settings.dayEnd, 18);
+  const nl = $('nowLine'), nt = $('nowTag');
+  const board = $('board'); const track = document.querySelector('#rows .track');
+  const H0 = parseHour(CONFIG.settings.dayStart, 8), H1 = parseHour(CONFIG.settings.dayEnd, 18);
   const span = Math.max(1, H1 - H0);
   const n = new Date(); const nowH = n.getHours()+n.getMinutes()/60;
-  const nl = $('nowLine'), nt = $('nowTag');
-  if (nowH < H0 || nowH > H1){ nl.classList.add('hidden'); nt.classList.add('hidden'); return; }
-  document.documentElement.style.setProperty('--now-frac', (nowH-H0)/span);
+  if (!board || !track || !isTodaySelected() || nowH < H0 || nowH > H1){
+    if (nl) nl.classList.add('hidden'); if (nt) nt.classList.add('hidden'); return;
+  }
+  const br = board.getBoundingClientRect(), tr = track.getBoundingClientRect();
+  const frac = Math.max(0, Math.min(1, (nowH-H0)/span));
+  const x = (tr.left - br.left) + frac * tr.width;
+  nl.style.left = x + 'px'; nt.style.left = x + 'px';
   nl.classList.remove('hidden'); nt.classList.remove('hidden');
   nt.textContent = formatTime(n);
 }
 
-/* ---- fonts / palette ---- */
+/* ---- theme / fonts / palette ---- */
 function applyFonts(){
   const f = Object.assign({}, DEFAULT_FONTS, CONFIG.settings.fonts || {});
   const s = document.documentElement.style;
@@ -263,18 +276,24 @@ function applyFonts(){
   s.setProperty('--fs-session-title', f.sessionTitle + 'px');
   s.setProperty('--fs-session-detail', f.sessionDetail + 'px');
 }
+function applyTheme(){
+  document.body.classList.toggle('dark', (CONFIG.settings.theme || 'light') === 'dark');
+  document.body.classList.toggle('bold-text', !!CONFIG.settings.boldText);
+  const b = document.body.style;
+  if (CONFIG.settings.headingColor) b.setProperty('--heading-color', CONFIG.settings.headingColor); else b.removeProperty('--heading-color');
+  if (CONFIG.settings.textColor) b.setProperty('--text', CONFIG.settings.textColor); else b.removeProperty('--text');
+}
 function applyPalette(name){
   const pal = PALETTES[name] || PALETTES.default;
   CONFIG.calendars.forEach((r, i) => { r.color = pal[i % pal.length]; });
 }
 
+/* ---- date navigation ---- */
+function updateDateLabel(){ $('todayDate').textContent = formatDate(selectedDate); $('datePick').value = toISODate(selectedDate); }
+function goToDate(d){ selectedDate = startOfDay(d); recomputeFromCache(); updateDateLabel(); render(); }
+
 /* ---- clock / countdown ---- */
-function tickClock(){
-  const n = new Date();
-  $('todayDate').textContent = formatDate(n);
-  $('clock').textContent = formatTime(n);
-  updateNowLine();
-}
+function tickClock(){ $('clock').textContent = formatTime(new Date()); updateNowLine(); }
 function scheduleRefresh(){
   if (refreshTimer) clearInterval(refreshTimer);
   const mins = parseInt(CONFIG.settings.refreshMinutes,10) || 30;
@@ -288,12 +307,28 @@ function tickCountdown(){
 }
 
 /* ---- settings ---- */
+function fillSelect(el, pairs, selected){
+  el.innerHTML = pairs.map(([v,l]) => `<option value="${escapeAttr(v)}"${String(v)===String(selected)?' selected':''}>${escapeHtml(l)}</option>`).join('');
+}
 function openSettings(){
+  roomsEditMode = false;
+  $('editRooms').textContent = 'Edit rooms';
+  $('addRoom').classList.add('hidden');
+  switchTab('rooms');
   buildRoomEditor();
+  fillSelect($('setTheme'), [['light','Light (bright)'],['dark','Dark']], CONFIG.settings.theme || 'light');
   fillSelect($('setPalette'), Object.keys(PALETTES).map(k => [k, k[0].toUpperCase()+k.slice(1)]), CONFIG.settings.palette || 'default');
   fillSelect($('setDateFormat'), DATE_FORMATS.map(([k,ex]) => [k, ex]), CONFIG.settings.dateFormat || 'ddd-d-mon-yyyy');
   fillSelect($('setRefresh2'), REFRESH_OPTS, String(CONFIG.settings.refreshMinutes || 30));
   $('setTimeFormat').value = CONFIG.settings.timeFormat || '24';
+  $('setBold').checked = !!CONFIG.settings.boldText;
+
+  const hc = CONFIG.settings.headingColor, tc = CONFIG.settings.textColor;
+  $('autoHeading').checked = !hc; $('setHeadingColor').value = hc || '#0f172a'; $('setHeadingColor').disabled = !hc;
+  $('autoText').checked = !tc; $('setTextColor').value = tc || '#0f172a'; $('setTextColor').disabled = !tc;
+  $('autoHeading').onchange = () => { $('setHeadingColor').disabled = $('autoHeading').checked; };
+  $('autoText').onchange = () => { $('setTextColor').disabled = $('autoText').checked; };
+
   const f = Object.assign({}, DEFAULT_FONTS, CONFIG.settings.fonts || {});
   $('fsHeading').value = f.heading; $('fsCaption').value = f.caption; $('fsTimeline').value = f.timeline;
   $('fsRoomName').value = f.roomName; $('fsSessionTitle').value = f.sessionTitle; $('fsSessionDetail').value = f.sessionDetail;
@@ -304,37 +339,70 @@ function openSettings(){
   $('overlay').classList.remove('hidden');
 }
 function closeSettings(){ $('overlay').classList.add('hidden'); }
-function fillSelect(el, pairs, selected){
-  el.innerHTML = pairs.map(([v,l]) => `<option value="${escapeAttr(v)}"${String(v)===String(selected)?' selected':''}>${escapeHtml(l)}</option>`).join('');
+function switchTab(name){
+  document.querySelectorAll('.stab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tabpane').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== name));
+}
+function urlHost(u){ try { return new URL(u.replace(/^webcal:/i,'https:')).host; } catch(e){ return u ? u.slice(0,44) : ''; } }
+function updateRoomsSummary(){
+  const total = CONFIG.calendars.length;
+  const withIcs = CONFIG.calendars.filter(c => c.url && c.url.trim()).length;
+  const hiddenN = (CONFIG.settings.hiddenRooms || []).length;
+  $('roomsSummary').textContent = `${total} rooms · ${withIcs} with ICS link · ${hiddenN} hidden`;
 }
 function buildRoomEditor(){
   const hidden = new Set(CONFIG.settings.hiddenRooms || []);
   const wrap = $('roomList'); wrap.innerHTML = '';
-  CONFIG.calendars.forEach((r,i) => {
+  CONFIG.calendars.forEach((r, i) => {
     const div = document.createElement('div');
-    div.className = 'room-item';
-    div.innerHTML =
-      `<input type="text" class="rname" value="${escapeAttr(r.name)}" data-i="${i}" data-k="name"/>
-       <input type="text" value="${escapeAttr(r.url||'')}" data-i="${i}" data-k="url" placeholder="ICS or webcal:// URL"/>
-       <input type="color" value="${r.color||'#2563eb'}" data-i="${i}" data-k="color"/>
-       <label class="check" style="white-space:nowrap;"><input type="checkbox" data-i="${i}" data-k="show" ${hidden.has(r.name)?'':'checked'}/> Show</label>
-       <button class="remove-room" data-i="${i}">✕</button>`;
+    if (!roomsEditMode){
+      // Read-only view card
+      const has = !!(r.url && r.url.trim());
+      div.className = 'room-card';
+      div.innerHTML =
+        `<span class="swatch" style="background:${r.color}"></span>
+         <div class="rc-grow"><div class="rc-name">${escapeHtml(r.name)}</div>
+           <div class="rc-meta">${has ? escapeHtml(urlHost(r.url)) : 'No ICS link set'}</div></div>
+         <span class="pill-status ${has?'ok':'no'}">${has?'ICS set':'No link'}</span>
+         <label class="rc-show"><input type="checkbox" ${hidden.has(r.name)?'':'checked'}/> Show</label>`;
+      div.querySelector('input[type=checkbox]').onchange = (e) => {
+        const set = new Set(CONFIG.settings.hiddenRooms || []);
+        if (e.target.checked) set.delete(r.name); else set.add(r.name);
+        CONFIG.settings.hiddenRooms = [...set]; updateRoomsSummary(); render();
+      };
+    } else {
+      // Edit row (live-updates CONFIG)
+      div.className = 'room-edit';
+      div.innerHTML =
+        `<input type="text" class="rname" value="${escapeAttr(r.name)}" placeholder="Room name"/>
+         <input type="text" class="rurl" value="${escapeAttr(r.url||'')}" placeholder="ICS or webcal:// URL"/>
+         <input type="color" class="rcolor" value="${r.color||'#2563eb'}"/>
+         <button class="remove-room">Delete</button>`;
+      const nameI = div.querySelector('.rname'), urlI = div.querySelector('.rurl'), colI = div.querySelector('.rcolor');
+      nameI.oninput = () => { r.name = nameI.value; };
+      urlI.oninput = () => { r.url = urlI.value.trim(); };
+      colI.oninput = () => { r.color = colI.value; render(); };
+      div.querySelector('.remove-room').onclick = (e) => {
+        const btn = e.target;
+        const span = document.createElement('span');
+        span.className = 'confirm';
+        span.innerHTML = `Delete “${escapeHtml(r.name)}”? <button class="cfm-yes remove-room">Delete</button> <button class="cfm-no small">Cancel</button>`;
+        btn.replaceWith(span);
+        span.querySelector('.cfm-yes').onclick = () => { CONFIG.calendars.splice(i,1); buildRoomEditor(); updateRoomsSummary(); render(); };
+        span.querySelector('.cfm-no').onclick = () => buildRoomEditor();
+      };
+    }
     wrap.appendChild(div);
   });
-  wrap.querySelectorAll('.remove-room').forEach(b => { b.onclick = () => { CONFIG.calendars.splice(+b.dataset.i,1); buildRoomEditor(); }; });
+  updateRoomsSummary();
 }
 function collectSettings(){
-  const hidden = [];
-  $('roomList').querySelectorAll('.room-item').forEach(item => {
-    const i = +item.querySelector('[data-k=name]').dataset.i;
-    const cal = CONFIG.calendars[i]; if (!cal) return;
-    cal.name = item.querySelector('[data-k=name]').value.trim() || cal.name;
-    cal.url = item.querySelector('[data-k=url]').value.trim();
-    cal.color = item.querySelector('[data-k=color]').value;
-    if (!item.querySelector('[data-k=show]').checked) hidden.push(cal.name);
-  });
-  CONFIG.settings.hiddenRooms = hidden;
+  // Room name/url/color and show/hide are updated live; nothing to read here.
+  CONFIG.settings.theme = $('setTheme').value;
   CONFIG.settings.palette = $('setPalette').value;
+  CONFIG.settings.boldText = $('setBold').checked;
+  CONFIG.settings.headingColor = $('autoHeading').checked ? '' : $('setHeadingColor').value;
+  CONFIG.settings.textColor = $('autoText').checked ? '' : $('setTextColor').value;
   CONFIG.settings.timeFormat = $('setTimeFormat').value;
   CONFIG.settings.dateFormat = $('setDateFormat').value;
   CONFIG.settings.refreshMinutes = parseInt($('setRefresh2').value,10);
@@ -348,7 +416,6 @@ function collectSettings(){
   CONFIG.settings.autoStartOnBoot = $('setAutoStart').checked;
 }
 
-/* ---- chrome (hide bottom) ---- */
 function applyChrome(){
   $('app').classList.toggle('hide-bottom', !!CONFIG.settings.hideBottom);
   $('fcBottom').classList.toggle('on', !!CONFIG.settings.hideBottom);
@@ -357,46 +424,59 @@ function applyChrome(){
 /* ---- init ---- */
 async function init(){
   CONFIG = await window.kiosk.getConfig();
+  applyFonts(); applyTheme(); applyChrome();
 
-  applyFonts();
-  applyChrome();
+  // date navigation
+  $('prevDay').onclick = () => goToDate(addDays(selectedDate, -1));
+  $('nextDay').onclick = () => goToDate(addDays(selectedDate, 1));
+  $('todayBtn').onclick = () => goToDate(new Date());
+  $('datePick').onchange = () => { const v = $('datePick').value; if (v){ const [y,m,dd] = v.split('-').map(Number); goToDate(new Date(y, m-1, dd)); } };
 
-  fillSelect($('refreshSel'), REFRESH_OPTS, String(CONFIG.settings.refreshMinutes || 30));
-  $('refreshSel').onchange = () => { CONFIG.settings.refreshMinutes = parseInt($('refreshSel').value,10); window.kiosk.saveConfig(CONFIG); scheduleRefresh(); };
-
+  // header icon controls
+  $('refreshNowBtn').onclick = () => refreshAll();
   $('fcFull').onclick = () => window.kiosk.toggleFullscreen();
   $('fcBottom').onclick = () => { CONFIG.settings.hideBottom = !CONFIG.settings.hideBottom; applyChrome(); window.kiosk.saveConfig(CONFIG); };
   $('fcSettings').onclick = () => openSettings();
-  $('refreshNowBtn').onclick = () => refreshAll();
 
   window.kiosk.onOpenSettings(() => openSettings());
   $('closeSettings').onclick = closeSettings;
+
+  // settings tabs
+  document.querySelectorAll('.stab').forEach(t => { t.onclick = () => switchTab(t.dataset.tab); });
+
+  // rooms: guarded edit mode
+  $('editRooms').onclick = () => {
+    roomsEditMode = !roomsEditMode;
+    $('editRooms').textContent = roomsEditMode ? 'Done editing' : 'Edit rooms';
+    $('addRoom').classList.toggle('hidden', !roomsEditMode);
+    buildRoomEditor();
+  };
   $('addRoom').onclick = () => { CONFIG.calendars.push({ name:'New room', url:'', color:'#2563eb', enabled:true }); buildRoomEditor(); };
   $('applyPalette').onclick = () => { applyPalette($('setPalette').value); buildRoomEditor(); render(); };
   $('fsToggle').onclick = () => window.kiosk.toggleFullscreen();
   $('quitApp').onclick = () => window.kiosk.quit();
 
   $('resetDefault').onclick = () => {
-    CONFIG.settings.fonts = Object.assign({}, DEFAULT_FONTS);
-    CONFIG.settings.palette = 'default';
-    CONFIG.settings.timeFormat = '24';
-    CONFIG.settings.dateFormat = 'ddd-d-mon-yyyy';
-    CONFIG.settings.dayStart = '08:00';
-    CONFIG.settings.dayEnd = '18:00';
-    CONFIG.settings.refreshMinutes = 30;
+    Object.assign(CONFIG.settings, {
+      fonts: Object.assign({}, DEFAULT_FONTS), palette:'default', theme:'light', boldText:false,
+      headingColor:'', textColor:'', timeFormat:'24', dateFormat:'ddd-d-mon-yyyy',
+      dayStart:'08:00', dayEnd:'18:00', refreshMinutes:30
+    });
     applyPalette('default');
-    openSettings(); // repopulate fields
-    applyFonts(); buildAxis(); render();
+    applyFonts(); applyTheme(); openSettings(); buildAxis(); render();
   };
 
   $('saveSettings').onclick = async () => {
     collectSettings();
     await window.kiosk.saveConfig(CONFIG);
     closeSettings();
-    applyFonts(); buildAxis(); scheduleRefresh(); await refreshAll();
+    applyFonts(); applyTheme(); buildAxis(); scheduleRefresh(); await refreshAll();
   };
 
+  window.addEventListener('resize', () => updateNowLine());
+
   buildAxis();
+  updateDateLabel();
   tickClock();
   setInterval(tickClock, 10000);
   setInterval(render, 60000);
