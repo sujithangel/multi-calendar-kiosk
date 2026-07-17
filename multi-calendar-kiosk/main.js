@@ -34,7 +34,7 @@ const DEFAULT_CONFIG = {
     room('Meeting Room 3', '#b45309')
   ],
   settings: {
-    refreshMinutes: 5,           // one of: 5,15,30,60,240,360,480,720,1440
+    refreshMinutes: 30,          // one of: 5,15,30,60,240,360,480,720,1440
     dayStart: '08:00',           // timeline start hour
     dayEnd: '18:00',             // timeline end hour
     hiddenRooms: [],             // names of rooms hidden from the board

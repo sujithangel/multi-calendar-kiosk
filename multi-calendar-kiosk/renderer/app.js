@@ -77,14 +77,44 @@ function push(out, s, e, title, sub, dayStart, dayEnd){
 }
 
 /* ---- Fetch ---- */
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function fetchWithRetry(url, retries){
+  let last = { ok: false, error: 'unknown' };
+  for (let a = 0; a <= retries; a++){
+    try { last = await window.kiosk.fetchIcs(url); } catch(e){ last = { ok:false, error: e.message }; }
+    if (last.ok) return last;
+    if (a < retries) await sleep(2000); // brief backoff before retry
+  }
+  return last;
+}
+
+let refreshing = false;
 async function refreshAll(){
-  await Promise.all(CONFIG.calendars.map(async (r) => {
-    if (!r.url || !r.url.trim()){ lastData[r.name] = { events:[], online:false, configured:false }; return; }
-    const res = await window.kiosk.fetchIcs(r.url);
-    if (!res.ok){ lastData[r.name] = { events: (lastData[r.name]||{}).events || [], online:false, configured:true, error:res.error }; return; }
-    try { lastData[r.name] = { events: expandTodayEvents(res.text), online:true, configured:true }; }
-    catch(e){ lastData[r.name] = { events:[], online:false, configured:true, error:'Parse error' }; }
-  }));
+  if (refreshing) return;           // avoid overlapping refresh storms
+  refreshing = true;
+  try {
+    let i = 0;
+    await Promise.all(CONFIG.calendars.map(async (r) => {
+      if (!r.url || !r.url.trim()){ lastData[r.name] = { events:[], online:false, configured:false }; return; }
+      await sleep((i++) * 300);      // stagger requests so 14 feeds don't fire at once
+      const prev = lastData[r.name] || {};
+      const res = await fetchWithRetry(r.url, 1);
+      if (!res.ok){
+        // Keep last-known events so a transient error doesn't blank the board
+        lastData[r.name] = { events: prev.events || [], online:false, configured:true, error: res.error, stale: true };
+        return;
+      }
+      try {
+        lastData[r.name] = { events: expandTodayEvents(res.text), online:true, configured:true };
+      } catch(e){
+        lastData[r.name] = { events: prev.events || [], online:false, configured:true, error:'Parse error', stale: true };
+      }
+      render(); // paint each feed as it lands
+    }));
+  } finally {
+    refreshing = false;
+  }
   render();
   resetCountdown();
 }
@@ -109,24 +139,26 @@ function render(){
 
   for (const r of CONFIG.calendars){
     const d = lastData[r.name] || { events:[], online:false, configured:!!(r.url&&r.url.trim()) };
+    const hasData = d.online || (d.events && d.events.length);
     if (d.configured) cConfigured++;
     if (d.online) cOnline++; else if (d.configured) cOffline++;
-    const busyNow = d.online && d.events.some(e => now >= e.start && now < e.end);
-    if (d.online){ if (busyNow) cBusy++; else cFree++; }
+    const busyNow = hasData && d.events.some(e => now >= e.start && now < e.end);
+    if (hasData){ if (busyNow) cBusy++; else cFree++; }
   }
 
   for (const r of rooms){
     const d = lastData[r.name] || { events:[], online:false, configured:!!(r.url&&r.url.trim()) };
+    const hasEvents = d.events && d.events.length;
     const statusCls = d.online ? 'on' : 'off';
-    const statusTxt = d.online ? 'Online' : 'Offline';
+    const statusTxt = d.online ? 'Online' : (hasEvents ? 'Cached' : 'Offline');
 
     let track = '';
     if (!d.configured){
       track = '<div class="empty">⚠ No Calendar Available</div>';
-    } else if (!d.online){
+    } else if (!d.online && !hasEvents){
       const err = d.error ? ' — ' + escapeHtml(d.error) : '';
       track = `<div class="empty">⚠ Offline${err}</div>`;
-    } else if (d.events.length === 0){
+    } else if (!hasEvents){
       track = '<div class="empty">No Sessions Today</div>';
     } else {
       // booked blocks
