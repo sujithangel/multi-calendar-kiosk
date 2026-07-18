@@ -86,12 +86,12 @@ function parseSession(title, sub){
   if (m && m.index > 0){
     const heading = title.slice(m.index).trim();
     const before = title.slice(0, m.index).trim().replace(/[-–—•|,]\s*$/, '').trim();
-    return { heading, detail: before || sub || '', emphasize: true };
+    return { heading, detail: before || sub || '', emphasize: true, subheading: !!before };
   }
   if (m && m.index === 0){
-    return { heading: title.trim(), detail: sub || '', emphasize: true };
+    return { heading: title.trim(), detail: sub || '', emphasize: true, subheading: false };
   }
-  return { heading: (title || '').trim(), detail: sub || '', emphasize: false };
+  return { heading: (title || '').trim(), detail: sub || '', emphasize: false, subheading: false };
 }
 
 /* ---- room icon (door) ---- */
@@ -247,7 +247,7 @@ function render(){
         track += `<div class="block${isLive?' live-block':''}" style="left:${l}%;width:${w}%;background:${r.color};">
           ${live}<div class="bt">${formatTime(ev.start)} - ${formatTime(ev.end)}</div>
           <div class="bn${ps.emphasize?' bn-lg':''}">${escapeHtml(ps.heading)}</div>
-          ${ps.detail ? `<div class="bp">${escapeHtml(ps.detail)}</div>` : ''}</div>`;
+          ${ps.detail ? `<div class="bp${ps.subheading?' bp-lg':''}">${escapeHtml(ps.detail)}</div>` : ''}</div>`;
       }
     }
     if (nowInRange) track += `<div class="rownow" style="left:${nowPct}%;"></div>`;
