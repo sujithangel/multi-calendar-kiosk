@@ -1,6 +1,6 @@
 {
   "name": "multi-calendar-kiosk",
-  "version": "1.6.0",
+  "version": "1.7.3",
   "description": "Fullscreen multi-calendar (ICS) kiosk for Windows that auto-starts on boot and cycles calendar views.",
   "main": "main.js",
   "author": "SP Jain",

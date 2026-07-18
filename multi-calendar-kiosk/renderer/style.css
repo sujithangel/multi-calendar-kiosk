@@ -15,6 +15,14 @@ body.bold-text { font-weight:600; }
 body.bold-text .h-main, body.bold-text .room-name, body.bold-text .block .bn, body.bold-text .hclock, body.bold-text .axis-hours .hr { font-weight:800; }
 #app { display:flex; flex-direction:column; height:100vh; }
 
+/* Smooth cross-fade when the theme changes */
+html, body, #hrow1, #hrow2, #board, #timeAxis, #rows, #footer, .row, .row-head, .track .empty, .nn-item, .settings-modal, .settings-tabs, .axis-hours .hr {
+  transition: background-color .7s ease, color .7s ease, border-color .7s ease;
+}
+.chips { display:flex; flex-wrap:wrap; gap:6px; }
+.chips label { flex-direction:row; align-items:center; gap:6px; font-size:12px; border:1px solid var(--border-2); border-radius:20px; padding:5px 10px; cursor:pointer; }
+.chips label .sw { width:12px; height:12px; border-radius:50%; display:inline-block; }
+
 /* Header (two rows) */
 #header { flex:none; }
 .hrow { display:flex; align-items:center; gap:16px; padding:7px 14px; border-bottom:1px solid var(--border); }
@@ -72,7 +80,8 @@ body.bold-text .h-main, body.bold-text .room-name, body.bold-text .block .bn, bo
 
 @keyframes livePulse { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0)} 50%{box-shadow:0 0 16px 2px rgba(239,68,68,.5)} }
 @keyframes dotPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(.6)} }
-.track .block.live-block { animation:livePulse 2.2s ease-in-out infinite; }
+.track .block.live-block { animation:livePulse 2.2s ease-in-out infinite; justify-content:flex-start; }
+.track .block .live-top { display:inline-flex; align-items:center; gap:5px; align-self:flex-start; background:#fff; font-size:var(--fs-session-detail); font-weight:800; padding:2px 8px; border-radius:6px; margin-bottom:2.4em; }
 .row.busy-now { outline:2px solid rgba(239,68,68,.35); outline-offset:-2px; }
 .row.busy-now .room-head, .row.busy-now .row-head { background:rgba(239,68,68,.06); }
 body.dark .row.busy-now .row-head { background:rgba(239,68,68,.14); }

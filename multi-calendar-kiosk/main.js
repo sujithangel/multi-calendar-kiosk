@@ -43,6 +43,9 @@ const DEFAULT_CONFIG = {
     dateFormat: 'ddd-d-mon-yyyy',// see app.js formatDate()
     palette: 'default',          // color palette name
     theme: 'light',              // light|dark|midnight|paper|slatepro|forest|contrast
+    autoSwitch: false,           // rotate through themes automatically
+    autoSwitchThemes: ['light','dark','midnight'], // presets to cycle
+    autoSwitchMinutes: 15,       // switch interval
     layout: 'rows',              // 'rows' | 'nownext'
     headWidth: 200,              // room-name column width in px (mouse-draggable)
     boldText: false,             // bold all text

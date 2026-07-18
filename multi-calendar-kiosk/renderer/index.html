@@ -16,7 +16,7 @@
           <div class="logo">SPJ</div>
           <div class="h-main">Classroom Daily View</div>
         </div>
-        <span class="ver-chip">v1.6</span>
+        <span class="ver-chip">v1.7.3</span>
       </div>
 
       <!-- Second header: date + icons -->
@@ -64,7 +64,7 @@
   <div id="overlay" class="overlay hidden">
     <div class="settings-modal">
       <div class="settings-head">
-        <h2>Settings</h2><div class="settings-ver">Classroom Daily View · v1.6</div>
+        <h2>Settings</h2><div class="settings-ver">Classroom Daily View · v1.7.3</div>
         <button id="closeSettings" class="icon-btn" title="Close"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="settings-body">
@@ -100,6 +100,12 @@
               <label>Date color<input type="color" id="setDateColor" /></label>
             </div>
             <p class="hint">Themes recolor the whole app. Changes preview live; close without saving to discard.</p>
+
+            <h3 style="margin-top:18px;">Auto-switch theme</h3>
+            <label class="check"><input type="checkbox" id="autoSwitch" /> Rotate through selected themes automatically (fades between them)</label>
+            <div style="margin-top:8px;"><div class="hint" style="margin:0 0 4px;">Presets to cycle:</div><div id="autoSwitchThemes" class="chips"></div></div>
+            <div class="grid2" style="margin-top:8px;"><label>Switch every<select id="autoSwitchEvery"></select></label><div></div></div>
+            <p class="hint">Pick 2 or more presets. Click <b>Save &amp; reload</b> to apply and start the rotation.</p>
           </section>
 
           <section class="tabpane hidden" data-pane="header">

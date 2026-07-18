@@ -5,6 +5,7 @@ let refreshTimer = null, nextRefreshAt = 0;
 let lastData = {};
 let refreshing = false;
 let selectedDate = startOfDay(new Date());
+let followToday = true;   // true while the view is tracking "today" (auto-rolls at midnight)
 let roomsEditMode = false;
 let cfgBackup = null;
 
@@ -16,6 +17,8 @@ const MON_LONG = ['January','February','March','April','May','June','July','Augu
 const REFRESH_OPTS = [[5,'5 min'],[15,'15 min'],[30,'30 min'],[60,'1 hour'],[240,'4 hours'],[360,'6 hours'],[480,'8 hours'],[720,'12 hours'],[1440,'24 hours']];
 const DATE_FORMATS = [['ddd-d-mon-yyyy','Wed, 16 Jul 2026'],['weekday-d-month-yyyy','Wednesday, 16 July 2026'],['d-mon-yyyy','16 Jul 2026'],['dd/mm/yyyy','16/07/2026'],['mm/dd/yyyy','07/16/2026'],['yyyy-mm-dd','2026-07-16']];
 const LAYOUTS = [['rows','Timeline rows'],['nownext','Now / Next split']];
+const AUTO_SWITCH_OPTS = [[1,'1 min'],[2,'2 min'],[5,'5 min'],[10,'10 min'],[15,'15 min'],[30,'30 min'],[60,'1 hour']];
+let autoSwitchTimer = null;
 const FONTS = [['','Default (Segoe UI)'],['Georgia, serif','Georgia (serif)'],['"Times New Roman", serif','Times (serif)'],['Arial, sans-serif','Arial'],['"Trebuchet MS", sans-serif','Trebuchet'],['Verdana, sans-serif','Verdana'],['Tahoma, sans-serif','Tahoma'],['"Courier New", monospace','Courier (mono)']];
 const PALETTES = {
   default:   ['#2563eb','#0891b2','#0d9488','#16a34a','#65a30d','#d97706','#ea580c','#dc2626','#db2777','#9333ea','#4f46e5','#0284c7','#7c3aed','#b45309'],
@@ -168,7 +171,7 @@ function renderRows(){
     else if(!hasEvents){ track=`<div class="empty" style="color:${r.color}">No Sessions Today</div>`; }
     else {
       for(const g of gaps(d.events,H0,H1)){ const l=clamp((g.s-H0)/span*100),w=clamp((g.e-H0)/span*100)-l; if(w<2.5) continue; track+=`<div class="block free" style="left:${l}%;width:${w}%;color:${r.color}"><div class="bt">${fmtHourFloat(g.s)} - ${fmtHourFloat(g.e)}</div><div class="bn">Free</div></div>`; }
-      for(const ev of d.events){ const sH=ev.start.getHours()+ev.start.getMinutes()/60,eH=ev.end.getHours()+ev.end.getMinutes()/60; const l=clamp((sH-H0)/span*100),w=clamp((eH-H0)/span*100)-l; if(w<=0) continue; const isLive=today&&now>=ev.start&&now<ev.end; const live=isLive?`<span class="live" style="color:${r.color}"><span class="live-dot"></span>LIVE</span>`:''; const ps=parseSession(ev.title,ev.sub); track+=`<div class="block${isLive?' live-block':''}" style="left:${l}%;width:${w}%;background:${r.color};">${live}<div class="bt">${formatTime(ev.start)} - ${formatTime(ev.end)}</div><div class="bn${ps.emphasize?' bn-lg':''}">${escapeHtml(ps.heading)}</div>${ps.detail?`<div class="bp${ps.subheading?' bp-lg':''}">${escapeHtml(ps.detail)}</div>`:''}</div>`; }
+      for(const ev of d.events){ const sH=ev.start.getHours()+ev.start.getMinutes()/60,eH=ev.end.getHours()+ev.end.getMinutes()/60; const l=clamp((sH-H0)/span*100),w=clamp((eH-H0)/span*100)-l; if(w<=0) continue; const isLive=today&&now>=ev.start&&now<ev.end; const live=isLive?`<div class="live-top" style="color:${r.color}"><span class="live-dot"></span> in progress...</div>`:''; const ps=parseSession(ev.title,ev.sub); track+=`<div class="block${isLive?' live-block':''}" style="left:${l}%;width:${w}%;background:${r.color};">${live}<div class="bt">${formatTime(ev.start)} - ${formatTime(ev.end)}</div><div class="bn${ps.emphasize?' bn-lg':''}">${escapeHtml(ps.heading)}</div>${ps.detail?`<div class="bp${ps.subheading?' bp-lg':''}">${escapeHtml(ps.detail)}</div>`:''}</div>`; }
     }
     if(nowInRange) track+=`<div class="rownow" style="left:${nowPct}%;"></div>`;
     html+=`<div class="row${rowBusy?' busy-now':''}"><div class="row-head"><div class="room-tile" style="background:${r.color};">${iconFor()}</div><div class="room-name">${escapeHtml(r.name)}</div><span class="room-dot ${dotCls}"></span></div><div class="track">${track}</div><div class="kebab">⋮</div></div>`;
@@ -248,12 +251,30 @@ function applyHeader(){
   s.setProperty('--h2-font', h2.font || 'inherit');
 }
 function applyPalette(name){ const pal=PALETTES[name]||PALETTES.default; CONFIG.calendars.forEach((r,i)=>{ r.color=pal[i%pal.length]; }); }
+/* Auto-switch theme rotation (fade handled by CSS transitions) */
+function startAutoSwitch(){
+  if(autoSwitchTimer){ clearInterval(autoSwitchTimer); autoSwitchTimer=null; }
+  const list=(CONFIG.settings.autoSwitchThemes||[]).filter(t=>THEMES[t]);
+  if(!CONFIG.settings.autoSwitch || list.length<2) return;
+  const mins=parseInt(CONFIG.settings.autoSwitchMinutes,10)||15;
+  autoSwitchTimer=setInterval(()=>{
+    const cur=CONFIG.settings.theme; let idx=list.indexOf(cur); const next=list[(idx+1)%list.length];
+    CONFIG.settings.theme=next; applyTheme();
+    const sel=$('setTheme'); if(sel && !$('overlay').classList.contains('hidden')) sel.value=next;
+  }, mins*60000);
+}
 function applyLayout(){ $('app').setAttribute('data-layout', CONFIG.settings.layout||'rows'); }
 function applyHeadWidth(){ document.documentElement.style.setProperty('--head-w',(CONFIG.settings.headWidth||200)+'px'); positionDivider(); }
 
 /* date navigation */
 function updateDateLabel(){ $('todayDate').textContent=formatDate(selectedDate); $('datePick').value=toISODate(selectedDate); }
-function goToDate(d){ selectedDate=startOfDay(d); recomputeFromCache(); updateDateLabel(); render(); }
+function goToDate(d){ selectedDate=startOfDay(d); followToday=(selectedDate.getTime()===startOfDay(new Date()).getTime()); recomputeFromCache(); updateDateLabel(); render(); }
+/* Automatically roll to the new day at midnight (only while tracking today). */
+function checkRollover(){
+  if(followToday && selectedDate.getTime()!==startOfDay(new Date()).getTime()){
+    selectedDate=startOfDay(new Date()); updateDateLabel(); recomputeFromCache(); render(); refreshAll();
+  }
+}
 
 /* divider */
 function positionDivider(){ const dv=$('colDivider'); if(!dv) return; const w=(CONFIG.settings.headWidth||200); dv.style.left=(w+14)+'px'; }
@@ -266,8 +287,10 @@ function setupDivider(){
 }
 
 /* clock / countdown */
-function tickClock(){ $('clock').textContent=formatTime(new Date()); updateNowLine(); }
-function scheduleRefresh(){ if(refreshTimer) clearInterval(refreshTimer); const mins=parseInt(CONFIG.settings.refreshMinutes,10)||30; refreshTimer=setInterval(refreshAll,mins*60000); resetCountdown(); }
+function tickClock(){ $('clock').textContent=formatTime(new Date()); checkRollover(); updateNowLine(); }
+/* Snap back to today, then refresh (kiosk behaviour: every refresh returns to today). */
+function refreshToToday(){ selectedDate=startOfDay(new Date()); followToday=true; updateDateLabel(); recomputeFromCache(); return refreshAll(); }
+function scheduleRefresh(){ if(refreshTimer) clearInterval(refreshTimer); const mins=parseInt(CONFIG.settings.refreshMinutes,10)||30; refreshTimer=setInterval(refreshToToday,mins*60000); resetCountdown(); }
 function resetCountdown(){ nextRefreshAt=Date.now()+(parseInt(CONFIG.settings.refreshMinutes,10)||30)*60000; }
 function tickCountdown(){ const sec=Math.max(0,Math.floor((nextRefreshAt-Date.now())/1000)); $('countdown').textContent=sec>=3600?(Math.floor(sec/3600)+'h '+pad(Math.floor((sec%3600)/60))+'m'):(pad(Math.floor(sec/60))+':'+pad(sec%60)); }
 
@@ -280,6 +303,9 @@ function openSettings(){
   fillSelect($('setTheme'), Object.keys(THEMES).map(k=>[k,THEMES[k].label]), CONFIG.settings.theme||'light');
   fillSelect($('setLayout'), LAYOUTS, CONFIG.settings.layout||'rows');
   fillSelect($('setPalette'), Object.keys(PALETTES).map(k=>[k,k[0].toUpperCase()+k.slice(1)]), CONFIG.settings.palette||'default');
+  $('autoSwitch').checked=!!CONFIG.settings.autoSwitch;
+  fillSelect($('autoSwitchEvery'), AUTO_SWITCH_OPTS, String(CONFIG.settings.autoSwitchMinutes||15));
+  buildAutoSwitchChips();
   fillSelect($('setDateFormat'), DATE_FORMATS.map(([k,ex])=>[k,ex]), CONFIG.settings.dateFormat||'ddd-d-mon-yyyy');
   fillSelect($('setRefresh2'), REFRESH_OPTS, String(CONFIG.settings.refreshMinutes||30));
   fillSelect($('h1font'), FONTS, (CONFIG.settings.header1||{}).font||'');
@@ -303,6 +329,10 @@ function openSettings(){
   $('setDayStart').value=CONFIG.settings.dayStart||'08:00'; $('setDayEnd').value=CONFIG.settings.dayEnd||'18:00';
   $('setFullscreen').checked=!!CONFIG.settings.startFullscreen; $('setAutoStart').checked=!!CONFIG.settings.autoStartOnBoot;
   $('overlay').classList.remove('hidden');
+}
+function buildAutoSwitchChips(){
+  const sel=new Set(CONFIG.settings.autoSwitchThemes||[]);
+  $('autoSwitchThemes').innerHTML=Object.keys(THEMES).map(k=>`<label><input type="checkbox" data-theme="${k}" ${sel.has(k)?'checked':''}/><span class="sw" style="background:${THEMES[k].bg};border:1px solid ${THEMES[k].border2}"></span>${THEMES[k].label}</label>`).join('');
 }
 function closeSettings(revert){ if(revert&&cfgBackup){ CONFIG=cfgBackup; applyFonts(); applyTheme(); applyLayout(); applyHeadWidth(); buildAxis(); render(); } cfgBackup=null; $('overlay').classList.add('hidden'); }
 function previewApply(){ collectSettings(); applyFonts(); applyTheme(); applyLayout(); applyHeadWidth(); buildAxis(); render(); }
@@ -330,6 +360,9 @@ function buildRoomEditor(){
 }
 function collectSettings(){
   CONFIG.settings.theme=$('setTheme').value;
+  CONFIG.settings.autoSwitch=$('autoSwitch').checked;
+  CONFIG.settings.autoSwitchMinutes=parseInt($('autoSwitchEvery').value,10)||15;
+  CONFIG.settings.autoSwitchThemes=[...$('autoSwitchThemes').querySelectorAll('input:checked')].map(i=>i.dataset.theme);
   CONFIG.settings.layout=$('setLayout').value;
   CONFIG.settings.palette=$('setPalette').value;
   CONFIG.settings.boldText=$('setBold').checked;
@@ -357,7 +390,7 @@ async function init(){
   $('todayBtn').onclick=()=>goToDate(new Date());
   $('datePick').onchange=()=>{ const v=$('datePick').value; if(v){ const [y,m,dd]=v.split('-').map(Number); goToDate(new Date(y,m-1,dd)); } };
 
-  $('refreshNowBtn').onclick=()=>refreshAll();
+  $('refreshNowBtn').onclick=()=>refreshToToday();
   $('fcFull').onclick=()=>window.kiosk.toggleFullscreen();
   $('fcBottom').onclick=()=>{ CONFIG.settings.hideBottom=!CONFIG.settings.hideBottom; applyChrome(); window.kiosk.saveConfig(CONFIG); };
   $('fcSettings').onclick=()=>openSettings();
@@ -380,15 +413,15 @@ async function init(){
   $('fsToggle').onclick=()=>window.kiosk.toggleFullscreen();
   $('quitApp').onclick=()=>window.kiosk.quit();
 
-  $('resetDefault').onclick=()=>{ const bak=cfgBackup; Object.assign(CONFIG.settings,{ fonts:Object.assign({},DEFAULT_FONTS), palette:'default', theme:'light', layout:'rows', headWidth:200, boldText:false, header1:{bg:'',color:'',size:0,font:''}, header2:{bg:'',color:'',size:0,font:''}, textColor:'', dateColor:'', titlePrefixes:'Dr., Prof., Mr., Ms., Miss, Mrs.', timeFormat:'24', dateFormat:'ddd-d-mon-yyyy', dayStart:'08:00', dayEnd:'18:00', refreshMinutes:30 }); applyPalette('default'); applyFonts(); applyTheme(); applyLayout(); applyHeadWidth(); openSettings(); cfgBackup=bak; buildAxis(); render(); };
+  $('resetDefault').onclick=()=>{ const bak=cfgBackup; Object.assign(CONFIG.settings,{ fonts:Object.assign({},DEFAULT_FONTS), palette:'default', theme:'light', autoSwitch:false, autoSwitchThemes:['light','dark','midnight'], autoSwitchMinutes:15, layout:'rows', headWidth:200, boldText:false, header1:{bg:'',color:'',size:0,font:''}, header2:{bg:'',color:'',size:0,font:''}, textColor:'', dateColor:'', titlePrefixes:'Dr., Prof., Mr., Ms., Miss, Mrs.', timeFormat:'24', dateFormat:'ddd-d-mon-yyyy', dayStart:'08:00', dayEnd:'18:00', refreshMinutes:30 }); applyPalette('default'); applyFonts(); applyTheme(); applyLayout(); applyHeadWidth(); openSettings(); cfgBackup=bak; buildAxis(); render(); };
 
-  $('saveSettings').onclick=async ()=>{ collectSettings(); await window.kiosk.saveConfig(CONFIG); closeSettings(false); applyFonts(); applyTheme(); applyLayout(); applyHeadWidth(); buildAxis(); scheduleRefresh(); await refreshAll(); };
+  $('saveSettings').onclick=async ()=>{ collectSettings(); await window.kiosk.saveConfig(CONFIG); closeSettings(false); applyFonts(); applyTheme(); applyLayout(); applyHeadWidth(); buildAxis(); scheduleRefresh(); startAutoSwitch(); await refreshAll(); };
 
   setupDivider();
   window.addEventListener('resize',()=>{ updateNowLine(); positionDivider(); });
 
   buildAxis(); updateDateLabel(); tickClock();
   setInterval(tickClock,10000); setInterval(render,60000); setInterval(tickCountdown,1000);
-  scheduleRefresh(); await refreshAll();
+  scheduleRefresh(); startAutoSwitch(); await refreshAll();
 }
 init();
