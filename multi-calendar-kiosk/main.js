@@ -42,9 +42,12 @@ const DEFAULT_CONFIG = {
     timeFormat: '24',            // '12' | '24'
     dateFormat: 'ddd-d-mon-yyyy',// see app.js formatDate()
     palette: 'default',          // color palette name
-    theme: 'light',              // 'light' | 'dark'
+    theme: 'light',              // light|dark|midnight|paper|slatepro|forest|contrast
+    layout: 'rows',              // 'rows' | 'nownext'
+    headWidth: 200,              // room-name column width in px (mouse-draggable)
     boldText: false,             // bold all text
-    headingColor: '',            // '' = auto (theme); else hex
+    header1: { bg:'', color:'', size:0, font:'' },  // top row: logo + title
+    header2: { bg:'', color:'', size:0, font:'' },  // second row: date + icons
     textColor: '',               // '' = auto (theme); else hex
     dateColor: '',               // '' = auto; else hex (header date)
     titlePrefixes: 'Dr., Prof., Mr., Ms., Miss, Mrs.', // titles pulled to front of session name (comma-separated); blank = off

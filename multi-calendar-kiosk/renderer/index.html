@@ -8,43 +8,33 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="app">
-    <!-- Top row: logo | centered date+clock | icon controls -->
+  <div id="app" data-layout="rows">
+    <!-- Top header: logo + title -->
     <header id="header">
-      <div class="brand">
-        <div class="logo">SPJ</div>
-        <div class="brand-txt">
-          <div class="brand-name">SP JAIN</div>
+      <div id="hrow1" class="hrow">
+        <div class="brand">
+          <div class="logo">SPJ</div>
           <div class="h-main">Classroom Daily View</div>
         </div>
+        <span class="ver-chip">v1.6</span>
       </div>
 
-      <div class="head-center">
-        <button id="prevDay" class="icon-btn" title="Previous day" aria-label="Previous day">
-          <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
-        <div class="dc">
-          <span id="todayDate" class="hdate">—</span>
-          <span class="hsep">·</span>
-          <span id="clock" class="hclock">--:--</span>
+      <!-- Second header: date + icons -->
+      <div id="hrow2" class="hrow">
+        <div class="head-center">
+          <button id="prevDay" class="icon-btn" title="Previous day"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div class="dc"><span id="todayDate" class="hdate">—</span><span class="hsep">·</span><span id="clock" class="hclock">--:--</span></div>
+          <button id="nextDay" class="icon-btn" title="Next day"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+          <button id="todayBtn" class="icon-btn" title="Today"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></button>
+          <label class="date-pick" title="Pick a date"><input type="date" id="datePick" /></label>
         </div>
-        <button id="nextDay" class="icon-btn" title="Next day" aria-label="Next day">
-          <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
-        <button id="todayBtn" class="icon-btn" title="Jump to today" aria-label="Today">
-          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M12 15h.01"/></svg></button>
-        <label class="date-pick" title="Pick a date"><input type="date" id="datePick" /></label>
-      </div>
-
-      <div class="head-right">
-        <span class="ver-chip">v1.5.3</span>
-        <span id="onlineCount" class="online">—</span>
-        <button id="refreshNowBtn" class="icon-btn" title="Refresh now" aria-label="Refresh now">
-          <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg></button>
-        <button id="fcFull" class="icon-btn" title="Toggle fullscreen (Esc)" aria-label="Fullscreen">
-          <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
-        <button id="fcBottom" class="icon-btn" title="Hide/show bottom summary" aria-label="Toggle summary">
-          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15h18"/></svg></button>
-        <button id="fcSettings" class="icon-btn" title="Settings (F10)" aria-label="Settings">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <div class="head-right">
+          <span id="onlineCount" class="online">—</span>
+          <button id="refreshNowBtn" class="icon-btn" title="Refresh now"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg></button>
+          <button id="fcFull" class="icon-btn" title="Fullscreen"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+          <button id="fcBottom" class="icon-btn" title="Hide/show summary"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15h18"/></svg></button>
+          <button id="fcSettings" class="icon-btn" title="Settings (F10)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        </div>
       </div>
     </header>
 
@@ -56,6 +46,7 @@
       </div>
       <main id="rows"></main>
       <div id="nowTag" class="hidden"></div>
+      <div id="colDivider" title="Drag to resize the room column"></div>
     </div>
 
     <!-- Footer -->
@@ -65,65 +56,73 @@
       <div class="stat"><span class="st-ico off">●</span><div><div class="st-lbl">Offline</div><div id="stOffline" class="st-val">0</div></div></div>
       <div class="stat"><span class="st-ico busy">●</span><div><div class="st-lbl">Busy Now</div><div id="stBusy" class="st-val">0</div></div></div>
       <div class="stat"><span class="st-ico free">●</span><div><div class="st-lbl">Free Now</div><div id="stFree" class="st-val">0</div></div></div>
-      <div class="refresh-count">
-        <div class="st-lbl">Next Refresh In</div>
-        <div id="countdown" class="st-val big">--:--</div>
-      </div>
+      <div class="refresh-count"><div class="st-lbl">Next Refresh In</div><div id="countdown" class="st-val big">--:--</div></div>
     </footer>
   </div>
 
-  <!-- Settings overlay (tabbed, professional) -->
+  <!-- Settings overlay -->
   <div id="overlay" class="overlay hidden">
     <div class="settings-modal">
       <div class="settings-head">
-        <h2>Settings</h2>
-        <div class="settings-ver">Classroom Daily View · v1.5.3</div>
-        <button id="closeSettings" class="icon-btn" title="Close" aria-label="Close">
-          <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        <h2>Settings</h2><div class="settings-ver">Classroom Daily View · v1.6</div>
+        <button id="closeSettings" class="icon-btn" title="Close"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>
-
       <div class="settings-body">
         <nav class="settings-tabs">
-          <button class="stab active" data-tab="rooms"><svg viewBox="0 0 24 24"><path d="M7 3h8a1 1 0 0 1 1 1v15H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M5 19h14"/></svg> Rooms</button>
-          <button class="stab" data-tab="appearance"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg> Appearance</button>
-          <button class="stab" data-tab="text"><svg viewBox="0 0 24 24"><path d="M4 7V5h16v2M9 20h6M12 5v15"/></svg> Text &amp; fonts</button>
-          <button class="stab" data-tab="datetime"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Time &amp; date</button>
-          <button class="stab" data-tab="system"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 20h8"/></svg> System</button>
+          <button class="stab active" data-tab="rooms">Rooms</button>
+          <button class="stab" data-tab="appearance">Appearance</button>
+          <button class="stab" data-tab="header">Header</button>
+          <button class="stab" data-tab="text">Text &amp; fonts</button>
+          <button class="stab" data-tab="datetime">Time &amp; date</button>
+          <button class="stab" data-tab="system">System</button>
         </nav>
-
         <div class="settings-content">
-          <!-- Rooms -->
           <section class="tabpane" data-pane="rooms">
-            <div class="pane-head">
-              <div><h3>Rooms &amp; ICS links</h3><p class="hint" id="roomsSummary">—</p></div>
-              <button id="editRooms" class="ghost small">Edit rooms</button>
-            </div>
+            <div class="pane-head"><div><h3>Rooms &amp; ICS links</h3><p class="hint" id="roomsSummary">—</p></div><button id="editRooms" class="ghost small">Edit rooms</button></div>
             <div id="roomList" class="room-list"></div>
             <button id="addRoom" class="ghost small hidden">+ Add room</button>
           </section>
 
-          <!-- Appearance -->
           <section class="tabpane hidden" data-pane="appearance">
             <h3>Appearance</h3>
             <div class="grid2">
-              <label>Theme<select id="setTheme"><option value="light">Light (bright)</option><option value="dark">Dark</option></select></label>
-              <label>Color palette<select id="setPalette"></select></label>
+              <label>Theme (full color scheme)<select id="setTheme"></select></label>
+              <label>Layout<select id="setLayout"></select></label>
+              <label>Color palette (room colors)<select id="setPalette"></select></label>
+              <div class="apply-wrap"><button id="applyPalette" class="ghost small">Apply palette to all rooms</button></div>
             </div>
-            <div class="pane-actions"><button id="applyPalette" class="ghost small">Apply palette to all rooms</button></div>
             <div class="grid2">
               <label class="check"><input type="checkbox" id="setBold" /> Bold text everywhere</label>
               <div></div>
-              <label class="check"><input type="checkbox" id="autoHeading" /> Auto heading color (match theme)</label>
-              <label>Heading color<input type="color" id="setHeadingColor" /></label>
-              <label class="check"><input type="checkbox" id="autoText" /> Auto text color (match theme)</label>
-              <label>Text color<input type="color" id="setTextColor" /></label>
-              <label class="check"><input type="checkbox" id="autoDate" /> Auto date color (match theme)</label>
+              <label class="check"><input type="checkbox" id="autoText" /> Auto body-text color</label>
+              <label>Body text color<input type="color" id="setTextColor" /></label>
+              <label class="check"><input type="checkbox" id="autoDate" /> Auto date color</label>
               <label>Date color<input type="color" id="setDateColor" /></label>
             </div>
-            <p class="hint">Changes preview live on the board behind this window. Close without saving to discard.</p>
+            <p class="hint">Themes recolor the whole app. Changes preview live; close without saving to discard.</p>
           </section>
 
-          <!-- Text & fonts -->
+          <section class="tabpane hidden" data-pane="header">
+            <h3>Top row (logo + title)</h3>
+            <div class="grid2">
+              <label class="check"><input type="checkbox" id="autoH1bg" /> Auto background</label>
+              <label>Background<input type="color" id="h1bg" /></label>
+              <label class="check"><input type="checkbox" id="autoH1color" /> Auto text color</label>
+              <label>Text color<input type="color" id="h1color" /></label>
+              <label>Text size (px)<input type="number" id="h1size" min="12" max="72" placeholder="auto" /></label>
+              <label>Font<select id="h1font"></select></label>
+            </div>
+            <h3 style="margin-top:18px;">Second row (date + icons)</h3>
+            <div class="grid2">
+              <label class="check"><input type="checkbox" id="autoH2bg" /> Auto background</label>
+              <label>Background<input type="color" id="h2bg" /></label>
+              <label class="check"><input type="checkbox" id="autoH2color" /> Auto text color</label>
+              <label>Text color<input type="color" id="h2color" /></label>
+              <label>Text size (px)<input type="number" id="h2size" min="10" max="48" placeholder="auto" /></label>
+              <label>Font<select id="h2font"></select></label>
+            </div>
+          </section>
+
           <section class="tabpane hidden" data-pane="text">
             <h3>Font sizes (px)</h3>
             <div class="grid3">
@@ -135,13 +134,10 @@
               <label>Session detail<input type="number" id="fsSessionDetail" min="7" max="36" /></label>
             </div>
             <h3 style="margin-top:20px;">Session title formatting</h3>
-            <label>Name prefixes to pull to the front (comma-separated)
-              <input type="text" id="setTitlePrefixes" placeholder="Dr., Prof., Mr., Ms." />
-            </label>
-            <p class="hint">If a session title contains one of these (e.g. <b>Dr.</b>, <b>Prof.</b>), that word onward becomes the bold heading (+2pt) and the text before it drops to the second line. Add more separated by commas. Leave blank to turn this off.</p>
+            <label>Name prefixes to pull to the front (comma-separated)<input type="text" id="setTitlePrefixes" placeholder="Dr., Prof., Mr., Ms." /></label>
+            <p class="hint">If a title contains one of these (e.g. <b>Dr.</b>), that word onward becomes the bold heading (+2pt) and the text before it drops to a subheading (+1pt). Leave blank to turn off.</p>
           </section>
 
-          <!-- Time & date -->
           <section class="tabpane hidden" data-pane="datetime">
             <h3>Time &amp; date</h3>
             <div class="grid2">
@@ -154,22 +150,17 @@
             </div>
           </section>
 
-          <!-- System -->
           <section class="tabpane hidden" data-pane="system">
             <h3>System</h3>
             <div class="grid2">
               <label class="check"><input type="checkbox" id="setFullscreen" /> Start fullscreen (kiosk)</label>
               <label class="check"><input type="checkbox" id="setAutoStart" /> Auto-start on Windows boot</label>
             </div>
-            <p class="hint">F10 opens settings · Esc exits fullscreen · Ctrl+Shift+Q quits.</p>
-            <div class="pane-actions">
-              <button id="fsToggle" class="ghost small">Toggle fullscreen</button>
-              <button id="quitApp" class="ghost small danger">Quit app</button>
-            </div>
+            <p class="hint">F10 opens settings · Esc exits fullscreen · Ctrl+Shift+Q quits. Drag the divider between the room names and the timeline to resize that column.</p>
+            <div class="pane-actions"><button id="fsToggle" class="ghost small">Toggle fullscreen</button><button id="quitApp" class="ghost small danger">Quit app</button></div>
           </section>
         </div>
       </div>
-
       <div class="settings-foot">
         <button id="saveSettings" class="primary">Save &amp; reload</button>
         <button id="resetDefault" class="ghost">Reset to default</button>
