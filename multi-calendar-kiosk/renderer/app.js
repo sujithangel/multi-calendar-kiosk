@@ -68,6 +68,32 @@ function formatDate(dt){
   }
 }
 
+/* Build the prefix matcher from the editable Settings list (comma-separated,
+   e.g. "Dr., Prof., Mr., Ms."). Whole-word, optional trailing dot, case-insensitive.
+   "Drawing"/"Professor" won't match (no word boundary). Blank list = disabled. */
+function titleRegex(){
+  const raw = (CONFIG.settings.titlePrefixes || '').split(',').map(s => s.trim().replace(/\.+$/,'')).filter(Boolean);
+  if (!raw.length) return null;
+  const esc = raw.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  try { return new RegExp('\\b(' + esc.join('|') + ')\\b\\.?', 'i'); } catch(e){ return null; }
+}
+/* If the title contains a listed prefix, make the name (from that word onward)
+   the heading, and drop the text before it to the detail line.
+   e.g. "LDN-PG- IH Dr. Yannis" -> heading "Dr. Yannis", detail "LDN-PG- IH" */
+function parseSession(title, sub){
+  const re = titleRegex();
+  const m = re ? re.exec(title || '') : null;
+  if (m && m.index > 0){
+    const heading = title.slice(m.index).trim();
+    const before = title.slice(0, m.index).trim().replace(/[-–—•|,]\s*$/, '').trim();
+    return { heading, detail: before || sub || '', emphasize: true };
+  }
+  if (m && m.index === 0){
+    return { heading: title.trim(), detail: sub || '', emphasize: true };
+  }
+  return { heading: (title || '').trim(), detail: sub || '', emphasize: false };
+}
+
 /* ---- room icon (door) ---- */
 function iconFor(){
   return '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
@@ -217,10 +243,11 @@ function render(){
         if (w <= 0) continue;
         const isLive = today && now >= ev.start && now < ev.end;
         const live = isLive ? `<span class="live" style="color:${r.color}"><span class="live-dot"></span>LIVE</span>` : '';
+        const ps = parseSession(ev.title, ev.sub);
         track += `<div class="block${isLive?' live-block':''}" style="left:${l}%;width:${w}%;background:${r.color};">
           ${live}<div class="bt">${formatTime(ev.start)} - ${formatTime(ev.end)}</div>
-          <div class="bn">${escapeHtml(ev.title)}</div>
-          ${ev.sub ? `<div class="bp">${escapeHtml(ev.sub)}</div>` : ''}</div>`;
+          <div class="bn${ps.emphasize?' bn-lg':''}">${escapeHtml(ps.heading)}</div>
+          ${ps.detail ? `<div class="bp">${escapeHtml(ps.detail)}</div>` : ''}</div>`;
       }
     }
     if (nowInRange) track += `<div class="rownow" style="left:${nowPct}%;"></div>`;
@@ -351,6 +378,7 @@ function openSettings(){
   const f = Object.assign({}, DEFAULT_FONTS, CONFIG.settings.fonts || {});
   $('fsHeading').value = f.heading; $('fsCaption').value = f.caption; $('fsTimeline').value = f.timeline;
   $('fsRoomName').value = f.roomName; $('fsSessionTitle').value = f.sessionTitle; $('fsSessionDetail').value = f.sessionDetail;
+  $('setTitlePrefixes').value = CONFIG.settings.titlePrefixes || '';
   $('setDayStart').value = CONFIG.settings.dayStart || '08:00';
   $('setDayEnd').value = CONFIG.settings.dayEnd || '18:00';
   $('setFullscreen').checked = !!CONFIG.settings.startFullscreen;
@@ -428,6 +456,7 @@ function collectSettings(){
   CONFIG.settings.headingColor = $('autoHeading').checked ? '' : $('setHeadingColor').value;
   CONFIG.settings.textColor = $('autoText').checked ? '' : $('setTextColor').value;
   CONFIG.settings.dateColor = $('autoDate').checked ? '' : $('setDateColor').value;
+  CONFIG.settings.titlePrefixes = $('setTitlePrefixes').value;
   CONFIG.settings.timeFormat = $('setTimeFormat').value;
   CONFIG.settings.dateFormat = $('setDateFormat').value;
   CONFIG.settings.refreshMinutes = parseInt($('setRefresh2').value,10);
@@ -471,7 +500,7 @@ async function init(){
 
   // live preview of theme/appearance/font/date changes
   ['setTheme','setBold','setHeadingColor','setTextColor','setDateColor','setTimeFormat','setDateFormat',
-   'fsHeading','fsCaption','fsTimeline','fsRoomName','fsSessionTitle','fsSessionDetail','setDayStart','setDayEnd']
+   'fsHeading','fsCaption','fsTimeline','fsRoomName','fsSessionTitle','fsSessionDetail','setTitlePrefixes','setDayStart','setDayEnd']
     .forEach(id => { const el = $(id); if (el){ el.addEventListener('change', previewApply); el.addEventListener('input', previewApply); } });
   $('autoHeading').addEventListener('change', () => { $('setHeadingColor').disabled = $('autoHeading').checked; previewApply(); });
   $('autoText').addEventListener('change', () => { $('setTextColor').disabled = $('autoText').checked; previewApply(); });
@@ -494,7 +523,7 @@ async function init(){
     const bak = cfgBackup;   // preserve original snapshot so Close can still revert
     Object.assign(CONFIG.settings, {
       fonts: Object.assign({}, DEFAULT_FONTS), palette:'default', theme:'light', boldText:false,
-      headingColor:'', textColor:'', dateColor:'', timeFormat:'24', dateFormat:'ddd-d-mon-yyyy',
+      headingColor:'', textColor:'', dateColor:'', titlePrefixes:'Dr., Prof., Mr., Ms., Miss, Mrs.', timeFormat:'24', dateFormat:'ddd-d-mon-yyyy',
       dayStart:'08:00', dayEnd:'18:00', refreshMinutes:30
     });
     applyPalette('default');

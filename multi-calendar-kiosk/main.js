@@ -47,6 +47,7 @@ const DEFAULT_CONFIG = {
     headingColor: '',            // '' = auto (theme); else hex
     textColor: '',               // '' = auto (theme); else hex
     dateColor: '',               // '' = auto; else hex (header date)
+    titlePrefixes: 'Dr., Prof., Mr., Ms., Miss, Mrs.', // titles pulled to front of session name (comma-separated); blank = off
     fonts: {                     // per-area font sizes (px)
       heading: 22, caption: 13, timeline: 16,
       roomName: 20, sessionTitle: 14, sessionDetail: 11

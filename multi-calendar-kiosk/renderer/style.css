@@ -75,6 +75,7 @@ body.bold-text .hclock, body.bold-text .axis-hours .hr { font-weight: 800; }
   display: flex; flex-direction: column; justify-content: center; color: #fff; line-height: 1.12; }
 .track .block .bt { font-size: var(--fs-session-detail); opacity: .92; white-space: nowrap; }
 .track .block .bn { font-size: var(--fs-session-title); font-weight: 700; white-space: normal; overflow-wrap: anywhere; word-break: break-word; overflow: hidden; }
+.track .block .bn.bn-lg { font-size: calc(var(--fs-session-title) + 2px); }
 .track .block .bp { font-size: var(--fs-session-detail); opacity: .88; white-space: normal; overflow-wrap: anywhere; word-break: break-word; overflow: hidden; }
 .track .block.free { background: transparent !important; border: 1.5px dashed currentColor; opacity: .55; }
 .track .block.free .bn { font-weight: 600; }
