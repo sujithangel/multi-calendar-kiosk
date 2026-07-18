@@ -54,6 +54,7 @@ const DEFAULT_CONFIG = {
     textColor: '',               // '' = auto (theme); else hex
     dateColor: '',               // '' = auto; else hex (header date)
     titlePrefixes: 'Dr., Prof., Mr., Ms., Miss, Mrs.', // titles pulled to front of session name (comma-separated); blank = off
+    inProgress: { text:'in progress...', color:'', size:0, bg:'' }, // live-session banner ('' = default)
     fonts: {                     // per-area font sizes (px)
       heading: 22, caption: 13, timeline: 16,
       roomName: 20, sessionTitle: 14, sessionDetail: 11

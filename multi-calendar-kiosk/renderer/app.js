@@ -171,7 +171,7 @@ function renderRows(){
     else if(!hasEvents){ track=`<div class="empty" style="color:${r.color}">No Sessions Today</div>`; }
     else {
       for(const g of gaps(d.events,H0,H1)){ const l=clamp((g.s-H0)/span*100),w=clamp((g.e-H0)/span*100)-l; if(w<2.5) continue; track+=`<div class="block free" style="left:${l}%;width:${w}%;color:${r.color}"><div class="bt">${fmtHourFloat(g.s)} - ${fmtHourFloat(g.e)}</div><div class="bn">Free</div></div>`; }
-      for(const ev of d.events){ const sH=ev.start.getHours()+ev.start.getMinutes()/60,eH=ev.end.getHours()+ev.end.getMinutes()/60; const l=clamp((sH-H0)/span*100),w=clamp((eH-H0)/span*100)-l; if(w<=0) continue; const isLive=today&&now>=ev.start&&now<ev.end; const live=isLive?`<div class="live-top" style="color:${r.color}"><span class="live-dot"></span> in progress...</div>`:''; const ps=parseSession(ev.title,ev.sub); track+=`<div class="block${isLive?' live-block':''}" style="left:${l}%;width:${w}%;background:${r.color};">${live}<div class="bt">${formatTime(ev.start)} - ${formatTime(ev.end)}</div><div class="bn${ps.emphasize?' bn-lg':''}">${escapeHtml(ps.heading)}</div>${ps.detail?`<div class="bp${ps.subheading?' bp-lg':''}">${escapeHtml(ps.detail)}</div>`:''}</div>`; }
+      for(const ev of d.events){ const sH=ev.start.getHours()+ev.start.getMinutes()/60,eH=ev.end.getHours()+ev.end.getMinutes()/60; const l=clamp((sH-H0)/span*100),w=clamp((eH-H0)/span*100)-l; if(w<=0) continue; const isLive=today&&now>=ev.start&&now<ev.end; const ipTxt=(CONFIG.settings.inProgress&&CONFIG.settings.inProgress.text)||'in progress...'; const live=isLive?`<div class="live-top"><span class="live-dot"></span>${escapeHtml(ipTxt)}</div>`:''; const ps=parseSession(ev.title,ev.sub); track+=`<div class="block${isLive?' live-block':''}" style="left:${l}%;width:${w}%;background:${r.color};">${live}<div class="bt">${formatTime(ev.start)} - ${formatTime(ev.end)}</div><div class="bn${ps.emphasize?' bn-lg':''}">${escapeHtml(ps.heading)}</div>${ps.detail?`<div class="bp${ps.subheading?' bp-lg':''}">${escapeHtml(ps.detail)}</div>`:''}</div>`; }
     }
     if(nowInRange) track+=`<div class="rownow" style="left:${nowPct}%;"></div>`;
     html+=`<div class="row${rowBusy?' busy-now':''}"><div class="row-head"><div class="room-tile" style="background:${r.color};">${iconFor()}</div><div class="room-name">${escapeHtml(r.name)}</div><span class="room-dot ${dotCls}"></span></div><div class="track">${track}</div><div class="kebab">⋮</div></div>`;
@@ -237,6 +237,10 @@ function applyTheme(){
   const b=document.body.style;
   if(CONFIG.settings.textColor) b.setProperty('--text',CONFIG.settings.textColor); else b.removeProperty('--text');
   if(CONFIG.settings.dateColor) b.setProperty('--date-color',CONFIG.settings.dateColor); else b.removeProperty('--date-color');
+  const ip=CONFIG.settings.inProgress||{};
+  if(ip.color) b.setProperty('--ip-color',ip.color); else b.removeProperty('--ip-color');
+  if(ip.bg) b.setProperty('--ip-bg',ip.bg); else b.removeProperty('--ip-bg');
+  if(ip.size) b.setProperty('--ip-size',ip.size+'px'); else b.removeProperty('--ip-size');
 }
 function applyHeader(){
   const s=document.documentElement.style; const t=THEMES[CONFIG.settings.theme]||THEMES.light;
@@ -326,6 +330,10 @@ function openSettings(){
   const f=Object.assign({},DEFAULT_FONTS,CONFIG.settings.fonts||{});
   $('fsHeading').value=f.heading; $('fsCaption').value=f.caption; $('fsTimeline').value=f.timeline; $('fsRoomName').value=f.roomName; $('fsSessionTitle').value=f.sessionTitle; $('fsSessionDetail').value=f.sessionDetail;
   $('setTitlePrefixes').value=CONFIG.settings.titlePrefixes||'';
+  const ip=CONFIG.settings.inProgress||{};
+  $('ipText').value=ip.text||''; $('ipSize').value=ip.size||'';
+  $('autoIpColor').checked=!ip.color; $('ipColor').value=ip.color||'#ffffff'; $('ipColor').disabled=!ip.color;
+  $('autoIpBg').checked=!ip.bg; $('ipBg').value=ip.bg||'#3b82f6'; $('ipBg').disabled=!ip.bg;
   $('setDayStart').value=CONFIG.settings.dayStart||'08:00'; $('setDayEnd').value=CONFIG.settings.dayEnd||'18:00';
   $('setFullscreen').checked=!!CONFIG.settings.startFullscreen; $('setAutoStart').checked=!!CONFIG.settings.autoStartOnBoot;
   $('overlay').classList.remove('hidden');
@@ -375,6 +383,7 @@ function collectSettings(){
   CONFIG.settings.refreshMinutes=parseInt($('setRefresh2').value,10);
   CONFIG.settings.fonts={ heading:+$('fsHeading').value, caption:+$('fsCaption').value, timeline:+$('fsTimeline').value, roomName:+$('fsRoomName').value, sessionTitle:+$('fsSessionTitle').value, sessionDetail:+$('fsSessionDetail').value };
   CONFIG.settings.titlePrefixes=$('setTitlePrefixes').value;
+  CONFIG.settings.inProgress={ text:$('ipText').value, size:parseInt($('ipSize').value,10)||0, color:$('autoIpColor').checked?'':$('ipColor').value, bg:$('autoIpBg').checked?'':$('ipBg').value };
   CONFIG.settings.dayStart=$('setDayStart').value||'08:00'; CONFIG.settings.dayEnd=$('setDayEnd').value||'18:00';
   CONFIG.settings.startFullscreen=$('setFullscreen').checked; CONFIG.settings.autoStartOnBoot=$('setAutoStart').checked;
 }
@@ -401,9 +410,9 @@ async function init(){
 
   const previewIds=['setTheme','setLayout','setBold','setTextColor','setDateColor','setTimeFormat','setDateFormat',
     'h1bg','h1color','h1size','h1font','h2bg','h2color','h2size','h2font',
-    'fsHeading','fsCaption','fsTimeline','fsRoomName','fsSessionTitle','fsSessionDetail','setTitlePrefixes','setDayStart','setDayEnd'];
+    'fsHeading','fsCaption','fsTimeline','fsRoomName','fsSessionTitle','fsSessionDetail','setTitlePrefixes','ipText','ipSize','ipColor','ipBg','setDayStart','setDayEnd'];
   previewIds.forEach(id=>{ const el=$(id); if(el){ el.addEventListener('change',previewApply); el.addEventListener('input',previewApply); } });
-  const autoPairs=[['autoText','setTextColor'],['autoDate','setDateColor'],['autoH1bg','h1bg'],['autoH1color','h1color'],['autoH2bg','h2bg'],['autoH2color','h2color']];
+  const autoPairs=[['autoText','setTextColor'],['autoDate','setDateColor'],['autoH1bg','h1bg'],['autoH1color','h1color'],['autoH2bg','h2bg'],['autoH2color','h2color'],['autoIpColor','ipColor'],['autoIpBg','ipBg']];
   autoPairs.forEach(([cb,inp])=>{ $(cb).addEventListener('change',()=>{ $(inp).disabled=$(cb).checked; previewApply(); }); });
   $('setPalette').addEventListener('change',()=>{ applyPalette($('setPalette').value); previewApply(); });
 
@@ -413,7 +422,7 @@ async function init(){
   $('fsToggle').onclick=()=>window.kiosk.toggleFullscreen();
   $('quitApp').onclick=()=>window.kiosk.quit();
 
-  $('resetDefault').onclick=()=>{ const bak=cfgBackup; Object.assign(CONFIG.settings,{ fonts:Object.assign({},DEFAULT_FONTS), palette:'default', theme:'light', autoSwitch:false, autoSwitchThemes:['light','dark','midnight'], autoSwitchMinutes:15, layout:'rows', headWidth:200, boldText:false, header1:{bg:'',color:'',size:0,font:''}, header2:{bg:'',color:'',size:0,font:''}, textColor:'', dateColor:'', titlePrefixes:'Dr., Prof., Mr., Ms., Miss, Mrs.', timeFormat:'24', dateFormat:'ddd-d-mon-yyyy', dayStart:'08:00', dayEnd:'18:00', refreshMinutes:30 }); applyPalette('default'); applyFonts(); applyTheme(); applyLayout(); applyHeadWidth(); openSettings(); cfgBackup=bak; buildAxis(); render(); };
+  $('resetDefault').onclick=()=>{ const bak=cfgBackup; Object.assign(CONFIG.settings,{ fonts:Object.assign({},DEFAULT_FONTS), palette:'default', theme:'light', autoSwitch:false, autoSwitchThemes:['light','dark','midnight'], autoSwitchMinutes:15, layout:'rows', headWidth:200, boldText:false, header1:{bg:'',color:'',size:0,font:''}, header2:{bg:'',color:'',size:0,font:''}, textColor:'', dateColor:'', titlePrefixes:'Dr., Prof., Mr., Ms., Miss, Mrs.', inProgress:{text:'in progress...',color:'',size:0,bg:''}, timeFormat:'24', dateFormat:'ddd-d-mon-yyyy', dayStart:'08:00', dayEnd:'18:00', refreshMinutes:30 }); applyPalette('default'); applyFonts(); applyTheme(); applyLayout(); applyHeadWidth(); openSettings(); cfgBackup=bak; buildAxis(); render(); };
 
   $('saveSettings').onclick=async ()=>{ collectSettings(); await window.kiosk.saveConfig(CONFIG); closeSettings(false); applyFonts(); applyTheme(); applyLayout(); applyHeadWidth(); buildAxis(); scheduleRefresh(); startAutoSwitch(); await refreshAll(); };
 

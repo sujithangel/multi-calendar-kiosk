@@ -16,7 +16,7 @@
           <div class="logo">SPJ</div>
           <div class="h-main">Classroom Daily View</div>
         </div>
-        <span class="ver-chip">v1.7.3</span>
+        <span class="ver-chip">v1.8</span>
       </div>
 
       <!-- Second header: date + icons -->
@@ -64,7 +64,7 @@
   <div id="overlay" class="overlay hidden">
     <div class="settings-modal">
       <div class="settings-head">
-        <h2>Settings</h2><div class="settings-ver">Classroom Daily View · v1.7.3</div>
+        <h2>Settings</h2><div class="settings-ver">Classroom Daily View · v1.8</div>
         <button id="closeSettings" class="icon-btn" title="Close"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="settings-body">
@@ -142,6 +142,16 @@
             <h3 style="margin-top:20px;">Session title formatting</h3>
             <label>Name prefixes to pull to the front (comma-separated)<input type="text" id="setTitlePrefixes" placeholder="Dr., Prof., Mr., Ms." /></label>
             <p class="hint">If a title contains one of these (e.g. <b>Dr.</b>), that word onward becomes the bold heading (+2pt) and the text before it drops to a subheading (+1pt). Leave blank to turn off.</p>
+
+            <h3 style="margin-top:20px;">"In progress" banner (live session)</h3>
+            <div class="grid2">
+              <label>Banner text<input type="text" id="ipText" placeholder="in progress..." /></label>
+              <label>Font size (px)<input type="number" id="ipSize" min="8" max="48" placeholder="auto" /></label>
+              <label class="check"><input type="checkbox" id="autoIpColor" /> Auto text color</label>
+              <label>Text color<input type="color" id="ipColor" /></label>
+              <label class="check"><input type="checkbox" id="autoIpBg" /> Auto background</label>
+              <label>Background color<input type="color" id="ipBg" /></label>
+            </div>
           </section>
 
           <section class="tabpane hidden" data-pane="datetime">
