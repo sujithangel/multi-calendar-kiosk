@@ -4,7 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Classroom Daily View</title>
-  <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
+  <!-- Bundled locally (no runtime CDN) for supply-chain safety -->
+  <script src="vendor/ical.min.js"></script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -16,7 +17,7 @@
           <div class="logo">SPJ</div>
           <div class="h-main">Classroom Daily View</div>
         </div>
-        <span class="ver-chip">v1.8</span>
+        <span class="ver-chip">v1.9</span>
       </div>
 
       <!-- Second header: date + icons -->
@@ -64,7 +65,7 @@
   <div id="overlay" class="overlay hidden">
     <div class="settings-modal">
       <div class="settings-head">
-        <h2>Settings</h2><div class="settings-ver">Classroom Daily View · v1.8</div>
+        <h2>Settings</h2><div class="settings-ver">Classroom Daily View · v1.9</div>
         <button id="closeSettings" class="icon-btn" title="Close"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="settings-body">
@@ -171,7 +172,9 @@
             <div class="grid2">
               <label class="check"><input type="checkbox" id="setFullscreen" /> Start fullscreen (kiosk)</label>
               <label class="check"><input type="checkbox" id="setAutoStart" /> Auto-start on Windows boot</label>
+              <label>Settings PIN (blank = no lock)<input type="text" id="setPin" inputmode="numeric" placeholder="e.g. 4826" /></label>
             </div>
+            <p class="hint">When a PIN is set, opening Settings requires it — this hides the ICS links from anyone at the kiosk. Keep a record of the PIN; clearing config resets it.</p>
             <p class="hint">F10 opens settings · Esc exits fullscreen · Ctrl+Shift+Q quits. Drag the divider between the room names and the timeline to resize that column.</p>
             <div class="pane-actions"><button id="fsToggle" class="ghost small">Toggle fullscreen</button><button id="quitApp" class="ghost small danger">Quit app</button></div>
           </section>
@@ -181,6 +184,18 @@
         <button id="saveSettings" class="primary">Save &amp; reload</button>
         <button id="resetDefault" class="ghost">Reset to default</button>
       </div>
+    </div>
+  </div>
+
+  <!-- PIN prompt (shown only when a Settings PIN is set) -->
+  <div id="pinOverlay" class="overlay hidden">
+    <div class="settings-modal" style="width:340px;height:auto;">
+      <div class="settings-head"><h2>Enter PIN</h2></div>
+      <div style="padding:22px;">
+        <input type="password" id="pinInput" placeholder="••••" inputmode="numeric" style="width:100%;text-align:center;font-size:22px;letter-spacing:6px;" />
+        <div id="pinErr" style="color:#e11d2a;font-size:12px;margin-top:8px;height:14px;"></div>
+      </div>
+      <div class="settings-foot"><button id="pinCancel" class="ghost">Cancel</button><button id="pinOk" class="primary" style="margin-left:auto;">Unlock</button></div>
     </div>
   </div>
 

@@ -59,6 +59,7 @@ const DEFAULT_CONFIG = {
       heading: 22, caption: 13, timeline: 16,
       roomName: 20, sessionTitle: 14, sessionDetail: 11
     },
+    pin: '',                     // Settings PIN ('' = no lock)
     startFullscreen: true,
     autoStartOnBoot: false
   }
@@ -154,7 +155,10 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false
     }
   });
 

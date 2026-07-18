@@ -300,6 +300,13 @@ function tickCountdown(){ const sec=Math.max(0,Math.floor((nextRefreshAt-Date.no
 
 /* settings */
 function fillSelect(el,pairs,selected){ el.innerHTML=pairs.map(([v,l])=>`<option value="${escapeAttr(v)}"${String(v)===String(selected)?' selected':''}>${escapeHtml(l)}</option>`).join(''); }
+/* Gate Settings behind a PIN if one is configured */
+function requestSettings(){
+  const pin=(CONFIG.settings.pin||'').trim();
+  if(!pin){ openSettings(); return; }
+  $('pinInput').value=''; $('pinErr').textContent=''; $('pinOverlay').classList.remove('hidden');
+  setTimeout(()=>$('pinInput').focus(),50);
+}
 function openSettings(){
   cfgBackup=JSON.parse(JSON.stringify(CONFIG));
   roomsEditMode=false; $('editRooms').textContent='Edit rooms'; $('addRoom').classList.add('hidden');
@@ -336,6 +343,7 @@ function openSettings(){
   $('autoIpBg').checked=!ip.bg; $('ipBg').value=ip.bg||'#3b82f6'; $('ipBg').disabled=!ip.bg;
   $('setDayStart').value=CONFIG.settings.dayStart||'08:00'; $('setDayEnd').value=CONFIG.settings.dayEnd||'18:00';
   $('setFullscreen').checked=!!CONFIG.settings.startFullscreen; $('setAutoStart').checked=!!CONFIG.settings.autoStartOnBoot;
+  $('setPin').value=CONFIG.settings.pin||'';
   $('overlay').classList.remove('hidden');
 }
 function buildAutoSwitchChips(){
@@ -386,6 +394,7 @@ function collectSettings(){
   CONFIG.settings.inProgress={ text:$('ipText').value, size:parseInt($('ipSize').value,10)||0, color:$('autoIpColor').checked?'':$('ipColor').value, bg:$('autoIpBg').checked?'':$('ipBg').value };
   CONFIG.settings.dayStart=$('setDayStart').value||'08:00'; CONFIG.settings.dayEnd=$('setDayEnd').value||'18:00';
   CONFIG.settings.startFullscreen=$('setFullscreen').checked; CONFIG.settings.autoStartOnBoot=$('setAutoStart').checked;
+  CONFIG.settings.pin=$('setPin').value.trim();
 }
 function applyChrome(){ $('app').classList.toggle('hide-bottom',!!CONFIG.settings.hideBottom); $('fcBottom').classList.toggle('on',!!CONFIG.settings.hideBottom); }
 
@@ -402,10 +411,16 @@ async function init(){
   $('refreshNowBtn').onclick=()=>refreshToToday();
   $('fcFull').onclick=()=>window.kiosk.toggleFullscreen();
   $('fcBottom').onclick=()=>{ CONFIG.settings.hideBottom=!CONFIG.settings.hideBottom; applyChrome(); window.kiosk.saveConfig(CONFIG); };
-  $('fcSettings').onclick=()=>openSettings();
+  $('fcSettings').onclick=()=>requestSettings();
 
-  window.kiosk.onOpenSettings(()=>openSettings());
+  window.kiosk.onOpenSettings(()=>requestSettings());
   $('closeSettings').onclick=()=>closeSettings(true);
+
+  // PIN overlay
+  const tryPin=()=>{ if($('pinInput').value===(CONFIG.settings.pin||'')){ $('pinOverlay').classList.add('hidden'); openSettings(); } else { $('pinErr').textContent='Incorrect PIN'; $('pinInput').value=''; $('pinInput').focus(); } };
+  $('pinOk').onclick=tryPin;
+  $('pinCancel').onclick=()=>$('pinOverlay').classList.add('hidden');
+  $('pinInput').addEventListener('keydown',(e)=>{ if(e.key==='Enter') tryPin(); if(e.key==='Escape') $('pinOverlay').classList.add('hidden'); });
   document.querySelectorAll('.stab').forEach(t=>{ t.onclick=()=>switchTab(t.dataset.tab); });
 
   const previewIds=['setTheme','setLayout','setBold','setTextColor','setDateColor','setTimeFormat','setDateFormat',
