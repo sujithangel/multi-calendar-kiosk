@@ -1,6 +1,7 @@
 {
   "name": "multi-calendar-kiosk",
-  "version": "1.9.0",
+  "productName": "SPJ Calendar",
+  "version": "1.9.1",
   "description": "Fullscreen multi-calendar (ICS) kiosk for Windows that auto-starts on boot and cycles calendar views.",
   "main": "main.js",
   "author": "SP Jain",
@@ -11,8 +12,8 @@
     "dist:portable": "electron-builder --win portable"
   },
   "build": {
-    "appId": "org.spjain.multicalendarkiosk",
-    "productName": "MultiCalendarKiosk",
+    "appId": "org.spjain.spjcalendar",
+    "productName": "SPJ Calendar",
     "files": [
       "main.js",
       "preload.js",
@@ -32,10 +33,13 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Multi Calendar Kiosk"
+      "shortcutName": "SPJ Calendar",
+      "installerIcon": "renderer/icon.ico",
+      "uninstallerIcon": "renderer/icon.ico",
+      "installerHeaderIcon": "renderer/icon.ico"
     },
     "portable": {
-      "artifactName": "MultiCalendarKiosk-portable.exe"
+      "artifactName": "SPJ-Calendar-portable.exe"
     }
   },
   "devDependencies": {
