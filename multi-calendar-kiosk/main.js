@@ -7,6 +7,15 @@
 const { app, BrowserWindow, ipcMain, globalShortcut, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
+const http = require('http');
+const crypto = require('crypto');
+
+// ---- Persistent feed cache (survives restarts / offline boot) ----
+const CACHE_DIR = path.join(app.getPath('userData'), 'cache');
+function cacheFile(url){ return path.join(CACHE_DIR, crypto.createHash('sha1').update(url).digest('hex') + '.ics'); }
+function writeCache(url, text){ try { fs.mkdirSync(CACHE_DIR, { recursive: true }); fs.writeFileSync(cacheFile(url), text, 'utf8'); } catch (e) {} }
+function readCache(url){ try { return fs.readFileSync(cacheFile(url), 'utf8'); } catch (e) { return null; } }
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
 
@@ -108,48 +117,72 @@ function logDiag(line) {
   } catch (e) {}
 }
 
-function fetchText(url) {
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const ACCEPT = 'text/calendar,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
+function snippetOf(d){ return (d||'').replace(/\s+/g,' ').trim().slice(0,120); }
+
+// Plain Node HTTP/1.1 client — minimal request, like a simple calendar client.
+// Avoids the extra Chromium headers / HTTP-2 that some strict ICS servers 400 on.
+// Does NOT use the system proxy (that's what the Chromium fallback is for).
+function nodeFetch(target, redirects) {
+  redirects = redirects || 0;
   return new Promise((resolve, reject) => {
-    // Clean common copy-paste junk: whitespace, wrapping <>, quotes
-    let target = (url || '').trim().replace(/^[<"'\s]+|[>"'\s]+$/g, '');
-    if (/^webcal:\/\//i.test(target)) target = 'https://' + target.replace(/^webcal:\/\//i, '');
-    if (!/^https?:\/\//i.test(target)) return reject(new Error('Invalid URL'));
-    // Normalize/encode the URL (fixes spaces and stray characters that cause 400)
-    try { target = new URL(target).toString(); } catch (e) { return reject(new Error('Invalid URL')); }
-    const host = (function(){ try { return new URL(target).host; } catch(e){ return ''; } })();
-
-    let request;
-    try {
-      request = net.request({ url: target, redirect: 'follow' });
-    } catch (e) {
-      logDiag('REQUEST-ERROR ' + host + ' :: ' + e.message);
-      return reject(new Error('Bad request'));
-    }
-    // Full browser-like headers — some providers (esp. Outlook/O365) 400 otherwise
-    request.setHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
-    request.setHeader('Accept', 'text/calendar,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
-    request.setHeader('Accept-Language', 'en-US,en;q=0.9');
-
-    const timer = setTimeout(() => { try { request.abort(); } catch (e) {} logDiag('TIMEOUT ' + host); reject(new Error('Timed out (20s)')); }, 20000);
-
-    request.on('response', (response) => {
-      const code = response.statusCode;
-      let data = '';
-      response.on('data', (c) => (data += c.toString('utf8')));
-      response.on('end', () => {
-        clearTimeout(timer);
-        if (code >= 200 && code < 300) { logDiag('OK ' + code + ' ' + host + ' (' + data.length + ' bytes)'); resolve(data); }
-        else {
-          const snippet = (data || '').replace(/\s+/g, ' ').trim().slice(0, 120);
-          logDiag('HTTP ' + code + ' ' + host + ' :: ' + snippet + ' :: URL=' + target);
-          reject(new Error('HTTP ' + code + (snippet ? ': ' + snippet : '')));
-        }
-      });
-      response.on('error', (e) => { clearTimeout(timer); logDiag('RESP-ERROR ' + host + ' :: ' + e.message); reject(e); });
+    if (redirects > 5) return reject(new Error('Too many redirects'));
+    let lib; try { lib = new URL(target).protocol === 'http:' ? http : https; } catch (e) { return reject(new Error('Invalid URL')); }
+    const req = lib.get(target, { headers: { 'User-Agent': UA, 'Accept': ACCEPT, 'Accept-Encoding': 'identity' } }, (res) => {
+      const code = res.statusCode;
+      if (code >= 300 && code < 400 && res.headers.location) { res.resume(); return resolve(nodeFetch(new URL(res.headers.location, target).toString(), redirects + 1)); }
+      let data = ''; res.setEncoding('utf8'); res.on('data', c => data += c);
+      res.on('end', () => { if (code >= 200 && code < 300) resolve(data); else reject(new Error('HTTP ' + code + (snippetOf(data) ? ': ' + snippetOf(data) : ''))); });
     });
-    request.on('error', (e) => { clearTimeout(timer); logDiag('NET-ERROR ' + host + ' :: ' + (e.message||'')); reject(new Error(e.message || 'Network error')); });
+    req.on('error', reject);
+    req.setTimeout(20000, () => req.destroy(new Error('Timed out (20s)')));
+  });
+}
+
+// Chromium/Electron client — respects the system PROXY, DNS and cert store.
+function netFetch(target) {
+  return new Promise((resolve, reject) => {
+    let request; try { request = net.request({ url: target, redirect: 'follow' }); } catch (e) { return reject(new Error('Bad request')); }
+    request.setHeader('User-Agent', UA);
+    request.setHeader('Accept', ACCEPT);
+    request.setHeader('Accept-Language', 'en-US,en;q=0.9');
+    const timer = setTimeout(() => { try { request.abort(); } catch (e) {} reject(new Error('Timed out (20s)')); }, 20000);
+    request.on('response', (response) => {
+      const code = response.statusCode; let data = '';
+      response.on('data', (c) => (data += c.toString('utf8')));
+      response.on('end', () => { clearTimeout(timer); if (code >= 200 && code < 300) resolve(data); else reject(new Error('HTTP ' + code + (snippetOf(data) ? ': ' + snippetOf(data) : ''))); });
+      response.on('error', (e) => { clearTimeout(timer); reject(e); });
+    });
+    request.on('error', (e) => { clearTimeout(timer); reject(new Error(e.message || 'Network error')); });
     request.end();
   });
+}
+
+// Try the plain Node client first (matches simple clients that already work),
+// then fall back to Chromium's stack (for proxy environments).
+async function fetchText(url) {
+  let target = (url || '').trim().replace(/^[<"'\s]+|[>"'\s]+$/g, '');
+  if (/^webcal:\/\//i.test(target)) target = 'https://' + target.replace(/^webcal:\/\//i, '');
+  if (!/^https?:\/\//i.test(target)) throw new Error('Invalid URL');
+  try { target = new URL(target).toString(); } catch (e) { throw new Error('Invalid URL'); }
+  const host = (function(){ try { return new URL(target).host; } catch(e){ return ''; } })();
+
+  try {
+    const text = await nodeFetch(target);
+    logDiag('OK(node) ' + host + ' (' + text.length + ' bytes)');
+    return text;
+  } catch (e1) {
+    logDiag('node failed ' + host + ' :: ' + e1.message + ' — trying proxy/chromium');
+    try {
+      const text = await netFetch(target);
+      logDiag('OK(net) ' + host + ' (' + text.length + ' bytes)');
+      return text;
+    } catch (e2) {
+      logDiag('BOTH failed ' + host + ' :: node=' + e1.message + ' | net=' + e2.message + ' :: URL=' + target);
+      throw new Error(e2.message || e1.message);
+    }
+  }
 }
 
 function applyAutoStart(enabled) {
@@ -202,9 +235,12 @@ ipcMain.handle('config:save', (_e, cfg) => {
 ipcMain.handle('ics:fetch', async (_e, url) => {
   try {
     const text = await fetchText(url);
+    writeCache(url, text);                 // remember last good copy on disk
     return { ok: true, text };
   } catch (e) {
-    return { ok: false, error: e.message };
+    const cached = readCache(url);          // fall back to last good copy if offline
+    if (cached) logDiag('using DISK CACHE for ' + url + ' :: ' + e.message);
+    return { ok: false, error: e.message, cachedText: cached || undefined };
   }
 });
 

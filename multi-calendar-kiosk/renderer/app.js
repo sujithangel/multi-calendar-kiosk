@@ -118,7 +118,7 @@ async function refreshAll(){
     await Promise.all(CONFIG.calendars.map(async (r)=>{
       if(!r.url||!r.url.trim()){ lastData[r.name]={events:[],online:false,configured:false}; return; }
       await sleep((i++)*300); const prev=lastData[r.name]||{}; const res=await fetchWithRetry(r.url,1);
-      if(!res.ok){ lastData[r.name]={raw:prev.raw,events:prev.events||[],online:false,configured:true,error:res.error,stale:true}; return; }
+      if(!res.ok){ const raw=prev.raw||res.cachedText||null; let events=prev.events||[]; if(!prev.raw&&res.cachedText){ try{ events=expandEventsForDate(res.cachedText,selectedDate); }catch(e){} } lastData[r.name]={raw,events,online:false,configured:true,error:res.error,stale:true}; return; }
       try{ lastData[r.name]={raw:res.text,events:expandEventsForDate(res.text,selectedDate),online:true,configured:true}; }
       catch(e){ lastData[r.name]={raw:res.text,events:prev.events||[],online:false,configured:true,error:'Parse error',stale:true}; }
       render();
