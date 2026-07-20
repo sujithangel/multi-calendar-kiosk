@@ -97,22 +97,40 @@ function saveConfig(cfg) {
 // the system PROXY, DNS and certificate store (same as a browser), which is why
 // feeds that work in a browser also work here. Handles webcal://, redirects and
 // gzip automatically. Bypasses browser CORS entirely (runs in main process).
+const DIAG_PATH = path.join(app.getPath('userData'), 'ics-diagnostics.log');
+function logDiag(line) {
+  try {
+    const stamp = new Date().toISOString();
+    fs.appendFileSync(DIAG_PATH, stamp + '  ' + line + '\n', 'utf8');
+    // keep the log small (last ~120 lines)
+    const txt = fs.readFileSync(DIAG_PATH, 'utf8').split('\n');
+    if (txt.length > 130) fs.writeFileSync(DIAG_PATH, txt.slice(-120).join('\n'), 'utf8');
+  } catch (e) {}
+}
+
 function fetchText(url) {
   return new Promise((resolve, reject) => {
-    let target = (url || '').trim();
-    if (target.startsWith('webcal://')) target = 'https://' + target.slice('webcal://'.length);
-    if (!/^https?:\/\//i.test(target)) return reject(new Error('Invalid URL: ' + url));
+    // Clean common copy-paste junk: whitespace, wrapping <>, quotes
+    let target = (url || '').trim().replace(/^[<"'\s]+|[>"'\s]+$/g, '');
+    if (/^webcal:\/\//i.test(target)) target = 'https://' + target.replace(/^webcal:\/\//i, '');
+    if (!/^https?:\/\//i.test(target)) return reject(new Error('Invalid URL'));
+    // Normalize/encode the URL (fixes spaces and stray characters that cause 400)
+    try { target = new URL(target).toString(); } catch (e) { return reject(new Error('Invalid URL')); }
+    const host = (function(){ try { return new URL(target).host; } catch(e){ return ''; } })();
 
     let request;
     try {
-      request = net.request({ url: target, redirect: 'follow', useSessionCookies: true });
+      request = net.request({ url: target, redirect: 'follow' });
     } catch (e) {
-      return reject(new Error('Bad request: ' + e.message));
+      logDiag('REQUEST-ERROR ' + host + ' :: ' + e.message);
+      return reject(new Error('Bad request'));
     }
-    request.setHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MultiCalendarKiosk/1.0');
-    request.setHeader('Accept', 'text/calendar, text/plain, */*');
+    // Full browser-like headers — some providers (esp. Outlook/O365) 400 otherwise
+    request.setHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+    request.setHeader('Accept', 'text/calendar,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
+    request.setHeader('Accept-Language', 'en-US,en;q=0.9');
 
-    const timer = setTimeout(() => { try { request.abort(); } catch (e) {} reject(new Error('Timed out (20s)')); }, 20000);
+    const timer = setTimeout(() => { try { request.abort(); } catch (e) {} logDiag('TIMEOUT ' + host); reject(new Error('Timed out (20s)')); }, 20000);
 
     request.on('response', (response) => {
       const code = response.statusCode;
@@ -120,12 +138,16 @@ function fetchText(url) {
       response.on('data', (c) => (data += c.toString('utf8')));
       response.on('end', () => {
         clearTimeout(timer);
-        if (code >= 200 && code < 300) resolve(data);
-        else reject(new Error('HTTP ' + code));
+        if (code >= 200 && code < 300) { logDiag('OK ' + code + ' ' + host + ' (' + data.length + ' bytes)'); resolve(data); }
+        else {
+          const snippet = (data || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+          logDiag('HTTP ' + code + ' ' + host + ' :: ' + snippet + ' :: URL=' + target);
+          reject(new Error('HTTP ' + code + (snippet ? ': ' + snippet : '')));
+        }
       });
-      response.on('error', (e) => { clearTimeout(timer); reject(e); });
+      response.on('error', (e) => { clearTimeout(timer); logDiag('RESP-ERROR ' + host + ' :: ' + e.message); reject(e); });
     });
-    request.on('error', (e) => { clearTimeout(timer); reject(new Error(e.message || 'Network error')); });
+    request.on('error', (e) => { clearTimeout(timer); logDiag('NET-ERROR ' + host + ' :: ' + (e.message||'')); reject(new Error(e.message || 'Network error')); });
     request.end();
   });
 }
